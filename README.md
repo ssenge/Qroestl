@@ -5,7 +5,7 @@ A thin optimization layer on top of Qiskit. Named after the delicious Austrian &
 
 First clone the repo:
 ```bash
-$ cgit clone https://github.com/ssenge/Qroestl.git
+$ git clone https://github.com/ssenge/Qroestl.git
 ```
 
 Then create an environment, e.g. using _conda_:
