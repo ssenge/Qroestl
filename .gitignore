@@ -127,3 +127,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Custom
+/dwave.conf
+/Test.py
+/Test_AWS_Provider.py
+/Qröstl.iml
+/.idea/
