@@ -2,9 +2,9 @@ from qiskit import BasicAer
 from qiskit.algorithms.optimizers import COBYLA
 from qiskit.utils import QuantumInstance
 
-import Model
-import Qiskit
-from problems import ExactCover, SetCover, SetCoverage
+from model import Model
+from backends import Qiskit
+from problems import ExactCover
 
 
 class Config:

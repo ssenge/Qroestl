@@ -1,6 +1,5 @@
 import warnings
 
-import Model
 from problems import SetCover
 
 warnings.filterwarnings('ignore', category=DeprecationWarning)

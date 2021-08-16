@@ -4,8 +4,8 @@ import numpy as np
 from qiskit_optimization import QuadraticProgram
 from qiskit_optimization.converters import QuadraticProgramToQubo
 
-import Model
-from Model import Problem, Solver, Solution, QPConvertible, QuboConvertible, OperatorConvertible
+from model import Model
+from model.Model import Solver, Solution, QPConvertible, QuboConvertible, OperatorConvertible
 from utils import Utils
 
 

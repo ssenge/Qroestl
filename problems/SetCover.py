@@ -1,6 +1,6 @@
 import warnings
 
-import Model
+from model import Model
 
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
@@ -11,7 +11,7 @@ from qiskit_optimization import QuadraticProgram
 from qiskit_optimization.converters import QuadraticProgramToQubo
 
 from utils import Utils
-from Model import Solver, Solution, QPConvertible, QuboConvertible, OperatorConvertible
+from model.Model import Solver, Solution, QPConvertible, QuboConvertible, OperatorConvertible
 
 
 # https://en.wikipedia.org/wiki/Set_cover_problem

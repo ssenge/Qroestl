@@ -13,7 +13,7 @@ from qiskit.utils import QuantumInstance
 import qiskit_optimization
 from qiskit_optimization.algorithms import MinimumEigenOptimizer, CplexOptimizer
 from utils import Utils
-from Model import Solver, Solution, QuboConvertible
+from model.Model import Solver, Solution, QuboConvertible
 
 
 
