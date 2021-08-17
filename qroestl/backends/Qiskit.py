@@ -12,8 +12,8 @@ from qiskit.optimization.applications.ising.common import sample_most_likely
 from qiskit.utils import QuantumInstance
 import qiskit_optimization
 from qiskit_optimization.algorithms import MinimumEigenOptimizer, CplexOptimizer
-from utils import Utils
-from model.Model import Solver, Solution, QuboConvertible
+from qroestl.utils import Utils
+from qroestl.model import Solver, Solution, QuboConvertible
 
 
 

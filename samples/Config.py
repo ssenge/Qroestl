@@ -1,12 +1,10 @@
 from qiskit import BasicAer
 from qiskit.algorithms.optimizers import COBYLA
 from qiskit.utils import QuantumInstance
-from qiskit_ionq import IonQProvider
-from qiskit import IBMQ
 
-from model import Model
-from backends import Qiskit
-from problems import ExactCover, SetCover, SetCoverage
+from qroestl.model import Model
+from qroestl.backends import Qiskit
+from qroestl.problems import SetCoverage
 
 
 class Config:

@@ -8,7 +8,7 @@ from typing import List, TypeVar, Generic, Optional, Callable
 
 from qiskit_optimization import QuadraticProgram
 
-from utils import Utils
+from qroestl.utils import Utils
 
 
 TCandidate = TypeVar('Solution Candidate', bound='Solution')

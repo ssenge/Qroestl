@@ -34,7 +34,7 @@ If you want to use IBM Q / IonQ / DWave cloud services, sign up on the respectiv
 
 ## Config
 
-Open [conf/Config.py](conf/Config.py) and setup the problem to solve. Finally, run:
+Open [conf/Config.py](samples/Config.py) and setup the problem to solve. Finally, run:
 
 ```bash
 $ python Main.py

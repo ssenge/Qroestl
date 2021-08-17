@@ -4,9 +4,9 @@ import numpy as np
 from qiskit_optimization import QuadraticProgram
 from qiskit_optimization.converters import QuadraticProgramToQubo
 
-from model import Model
-from model.Model import Solver, Solution, QPConvertible, QuboConvertible, OperatorConvertible
-from utils import Utils
+from qroestl.model import Model
+from qroestl.model.Model import Solver, Solution, QPConvertible, QuboConvertible, OperatorConvertible
+from qroestl.utils import Utils
 
 
 # https://en.wikipedia.org/wiki/Maximum_coverage_problem

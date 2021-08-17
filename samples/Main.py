@@ -1,7 +1,7 @@
 import warnings
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
-from conf.Config import Config
+from samples.Config import Config
 
 if __name__ == '__main__':
     print(Config.p)

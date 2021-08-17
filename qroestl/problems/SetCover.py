@@ -1,6 +1,6 @@
 import warnings
 
-from model import Model
+from qroestl.model import Model
 
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
@@ -10,8 +10,8 @@ import numpy as np
 from qiskit_optimization import QuadraticProgram
 from qiskit_optimization.converters import QuadraticProgramToQubo
 
-from utils import Utils
-from model.Model import Solver, Solution, QPConvertible, QuboConvertible, OperatorConvertible
+from qroestl.utils import Utils
+from qroestl.model.Model import Solver, Solution, QPConvertible, QuboConvertible, OperatorConvertible
 
 
 # https://en.wikipedia.org/wiki/Set_cover_problem

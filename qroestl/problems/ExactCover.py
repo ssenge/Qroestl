@@ -1,6 +1,6 @@
 import warnings
 
-from problems import SetCover
+from qroestl.problems import SetCover
 
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
