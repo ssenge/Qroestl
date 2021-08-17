@@ -13,13 +13,16 @@ from utils import Utils
 
 TCandidate = TypeVar('Solution Candidate', bound='Solution')
 
+
 class Problem(Generic[TCandidate], ABC):
+    name: Optional[str] = None
+
     @abstractmethod
     def feasible(self, c: TCandidate) -> bool:
         raise NotImplementedError
 
     @abstractmethod
-    def cost(self, c: TCandidate) -> int:
+    def cost(self, c: TCandidate) -> float:
         raise NotImplementedError
 
     def better(self, c1: TCandidate, c2: TCandidate) -> bool:
@@ -34,14 +37,17 @@ class Problem(Generic[TCandidate], ABC):
 
 TProblem = TypeVar('Problem', bound='Problem')
 
+
 @dataclass
 class Solution(Generic[TCandidate, TProblem], ABC):
     best: (Optional[TCandidate], Optional[float]) = (None, None)
-    solver: Optional[Solver] = None
     took: Optional[int] = None
 
     def eval(self, p: TProblem, c: TCandidate) -> Solution[TCandidate, TProblem]:
         return replace(self, best=(c, p.cost(c)) if p.superior(self.best[0], c) else self.best)
+
+    def __str__(self):
+        return f'{self.best[0]} -> {self.best[1]} | {self.took}'
 
 
 @dataclass
@@ -57,7 +63,10 @@ class Solver(Generic[TCandidate, TProblem], ABC):
         start = datetime.now()
         solution = self.solve_(p)
         end = datetime.now()
-        return replace(solution, solver=self.name, took=end - start)
+        return replace(solution, took=end - start)
+
+    def __str__(self):
+        return self.name
 
 
 class QPConvertible:
@@ -65,15 +74,18 @@ class QPConvertible:
     def to_qp(self) -> QuadraticProgram:
         raise NotImplementedError
 
+
 class QuboConvertible:
     @abstractmethod
     def to_qubo(self) -> QuadraticProgram:
         raise NotImplementedError
 
+
 class OperatorConvertible:
     @abstractmethod
     def to_op(self) -> "Operator":
         raise NotImplementedError
+
 
 @dataclass
 class BruteForce(Generic[TCandidate, TProblem], Solver[TCandidate, TProblem]):

@@ -45,7 +45,7 @@ class CanHandleOpsAndQPs:
 
 @dataclass
 class QAOA(Generic[TCandidate, TProblem], QiskitSolver[TCandidate, TProblem], CanHandleOpsAndQPs):
-    name: str = "Qiskit-QAOA2"
+    name: str = "Qiskit-QAOA"
 
     def __post_init__(self) -> None:
         self.algo = qiskit.algorithms.QAOA(**self.kwargs, quantum_instance=self.quantum_instance)

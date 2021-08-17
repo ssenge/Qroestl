@@ -40,5 +40,16 @@ Open [conf/Config.py](conf/Config.py) and setup the problem to solve. Finally, r
 $ python Main.py
 ```
 
+The output will look similar to the following:
+```bash
+Problem(name='Set Coverage', k=2, S=array([list([7]), list([8]), list([1, 2])], dtype=object), W=[100, 1, 1, 1])
+Quantum Device: statevector_simulator
+Greedy              [0, 2] -> 102 | 0:00:00.000405
+BruteForce          [0, 2] -> 102 | 0:00:00.000173
+Qiskit-NumpyExact   [0, 2] -> 102 | 0:00:00.053109
+Qiskit-CPLEX        [0, 2] -> 102 | 0:00:00.057020
+Qiskit-VQE          [0, 2] -> 102 | 0:00:00.745350
+Qiskit-QAOA         [0, 2] -> 102 | 0:00:00.748309
+```
 
 

@@ -6,7 +6,7 @@ from qiskit import IBMQ
 
 from model import Model
 from backends import Qiskit
-from problems import ExactCover, SetCover
+from problems import ExactCover, SetCover, SetCoverage
 
 
 class Config:
@@ -23,19 +23,19 @@ class Config:
     p = (
         # SetCover.Generator.linear(20, 5)
         # SetCover.Problem([1, 2, 3, 4, 5, 6, 7], [[7, 1], [1, 2, 3], [4, 5], [6]])
-        SetCover.Problem([1, 2], [[1], [2]])
+        # SetCover.Problem([1, 2], [[1], [2]])
 
         # ExactCover.Problem([1, 2, 3, 4, 5, 6, 7], [[7], [1, 2, 3], [4, 5], [6]])
 
-        # MaxSetCoverageProblem(k=2, S=[[7], [1, 2], [3]])  # VQE: 152sec
-        # SetCoverage.Problem(k=2, S=[[7], [1, 2]])
+        # SetCoverage.Problem(k=2, S=[[7], [1, 2], [3]])  # VQE: 152sec
+        SetCoverage.Problem(k=2, S=[[7], [8], [1, 2]], W=[100, 1, 1, 1])
     )
 
     # Problem-specific algorithms
     sas = [
-        SetCover.Greedy()
+        # SetCover.Greedy()
         # ExactCover.Greedy()
-        # MaxSetCoverage.Greedy()
+        SetCoverage.Greedy()
     ]
 
     # Generic algorithms
@@ -45,7 +45,7 @@ class Config:
         # Qiskit.CPLEX(),  # make sure that CPLEX is installed
         # Qiskit.DWaveAnnealer(),  # make sure that DWave tools / configuration is in place
         Qiskit.VQE(quantum_instance=qdev, kwargs={'optimizer': COBYLA(1)}),
-        # Qiskit.QAOA(quantum_instance=qdev, kwargs={'reps': 2, 'optimizer': COBYLA(1)})
+        Qiskit.QAOA(quantum_instance=qdev, kwargs={'reps': 2, 'optimizer': COBYLA(1)})
     ]
 
     algos = sas + gas
