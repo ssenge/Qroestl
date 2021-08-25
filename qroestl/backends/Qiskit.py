@@ -1,4 +1,7 @@
 import warnings
+
+import numpy as np
+
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
 from typing import Generic, TypeVar, Optional, List
@@ -32,7 +35,7 @@ class QiskitSolver(Generic[TCandidate, TProblem], Solver[TCandidate, TProblem]):
             p_converted = p.to_qubo()
         pre = reduce(lambda x, f: f(x), self.pre, p_converted)
         post = reduce(lambda x, f: f(x), self.post, self.run(pre))
-        return s.eval(p, Utils.bits2idx(len(p.S))(post))
+        return s.eval(p, Utils.bits2idx(len(p.S))(np.clip(np.rint(post), 0, 1)))
 
 
 class CanHandleOpsAndQPs:

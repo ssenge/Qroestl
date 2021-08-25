@@ -7,6 +7,7 @@ from functools import reduce
 from typing import List, TypeVar, Generic, Optional, Callable
 
 from qiskit_optimization import QuadraticProgram
+from qiskit_optimization.converters import QuadraticProgramToQubo
 
 from qroestl.utils import Utils
 
@@ -78,13 +79,12 @@ class QPConvertible:
 class QuboConvertible:
     @abstractmethod
     def to_qubo(self) -> QuadraticProgram:
-        raise NotImplementedError
-
+        return QuadraticProgramToQubo().convert(self.to_qp())
 
 class OperatorConvertible:
     @abstractmethod
     def to_op(self) -> "Operator":
-        raise NotImplementedError
+        return self.to_qubo().to_ising()[0]
 
 
 @dataclass

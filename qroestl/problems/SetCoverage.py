@@ -19,13 +19,14 @@ TCandidate = List[List[int]]  # this is more the "logical" type, in reality it i
 class Problem(Model.Problem[TCandidate], QPConvertible, QuboConvertible, OperatorConvertible):
     name: str = 'Set Coverage'
     k: int = 1
+    #U: Optional[List[int]] = None
     S: Optional[List[List[int]]] = None
     W: Optional[List[int]] = None
 
     def __post_init__(self) -> None:
         self.S = np.array(self.S+[[]], dtype=object)
         self.S = self.S[:-1]
-        self.U = Utils.union_non_sorted(self.S)
+        self.U = list(dict.fromkeys(Utils.union_non_sorted(self.S)))
         self.W = self.W if self.W is not None else [1]*len(self.U)
         self.SW = {s: w for s, w in zip(self.U, self.W)}
 
@@ -47,7 +48,7 @@ class Problem(Model.Problem[TCandidate], QPConvertible, QuboConvertible, Operato
         for u in self.U:  # add cover constraints
             qp.linear_constraint(linear={**{f's{i}': 1 for i in range(len(self.S)) if u in self.S[i]}, **{f'u{u}': -1}},
                                  sense='>=', rhs=0, name=f'cover y{u}')
-        #print(qp.export_as_lp_string())
+        print(qp.export_as_lp_string())
         return qp
 
     def to_qubo(self) -> QuadraticProgram:
@@ -69,7 +70,7 @@ class Greedy(Solver[TCandidate, Problem]):
                 i-1,
                 np.setdiff1d(U, S[max_s]),
                 np.delete(S, max_s),
-                np.delete(W, max_s),
+                np.delete(W, max_s), # bug
                 sol + [Utils.where(p.S, S[max_s])])
 
         return s.eval(p, rec())
