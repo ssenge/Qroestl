@@ -17,7 +17,7 @@ TCandidate = List[List[int]]  # this is more the "logical" type, in reality it i
 
 @dataclass
 class Problem(Model.Problem[TCandidate], QPConvertible, QuboConvertible, OperatorConvertible):
-    name: str = 'Set Coverage'
+    name: str = 'Max Set Coverage'
     k: int = 1
     #U: Optional[List[int]] = None
     S: Optional[List[List[int]]] = None

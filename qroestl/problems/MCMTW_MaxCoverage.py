@@ -6,7 +6,7 @@ from qiskit_optimization import QuadraticProgram
 
 from qroestl.model import Model
 from qroestl.model.Model import QPConvertible, QuboConvertible, OperatorConvertible, Solver, Solution
-from qroestl.problems import SetCoverage
+from qroestl.problems import MaxCoverage
 from qroestl.utils import Utils
 
 TCandidate = List[List[int]]  # this is more the "logical" type, in reality it is np.array[List[int]]
@@ -127,8 +127,8 @@ class Greedy(Solver[TCandidate, Problem]):
                 k_p = p.k - len(sol)
                 S_p = np.delete(p.S, sol)
                 W_p = [p.UW[s] for s in Utils.union(S_p)]
-                p_p = SetCoverage.Problem(k=k_p, S=list(S_p), W=W_p)
-                r = SetCoverage.Greedy().solve(p_p)
+                p_p = MaxCoverage.Problem(k=k_p, S=list(S_p), W=W_p)
+                r = MaxCoverage.Greedy().solve(p_p)
                 add = []
                 for i in r.best[0]:
                     a = Utils.where(p.S, S_p[i])

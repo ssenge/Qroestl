@@ -4,7 +4,7 @@ from qiskit.utils import QuantumInstance
 
 from qroestl.model import Model
 from qroestl.backends import Qiskit
-from qroestl.problems import SetCoverage, MultiCover
+from qroestl.problems import MaxCoverage, MCMTW_MaxCoverage
 
 
 class Config:
@@ -46,7 +46,7 @@ class Config:
         # SetCover.Greedy()
         # ExactCover.Greedy()
         # SetCoverage.Greedy()
-        MultiCover.Greedy()
+        MCMTW_MaxCoverage.Greedy()
     ]
 
     # Generic algorithms
