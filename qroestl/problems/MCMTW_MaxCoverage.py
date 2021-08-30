@@ -90,7 +90,7 @@ class Problem(Model.Problem[TCandidate], QPConvertible, QuboConvertible, Operato
                 for t in self.UT[u]:
                     qp.linear_constraint(linear={**{f's{j}': -1 for j in range(len(self.S)) if self.ST[str(self.S[j])] == t},
                                                  **{f'u{u}t{t}': 1}}, sense='<=', rhs=0, name=f'type cover u{u}t{t}')
-        print(qp.export_as_lp_string())
+        #print(qp.export_as_lp_string())
         return qp
 
     def to_qubo(self) -> QuadraticProgram:
