@@ -25,19 +25,21 @@ class Config:
 
         # ExactCover.Problem([1, 2, 3, 4, 5, 6, 7], [[7], [1, 2, 3], [4, 5], [6]])
 
-        # SetCoverage.Problem(k=2, S=[[7], [1, 2], [3, 4]])
+        MaxCoverage.Problem(k=3, S=[])
+        #MaxCoverage.Problem(k=3, S=[[3, 6], [1, 2, 4, 5], [1, 2, 3]], W=[1, 1, 1, 1, 1, 10])  # [1, 0] -> 15
         # SetCoverage.Problem(k=2, S=[[7, 8, 2], [8, 7], [1, 2]], W=[1, 10, 1, 1])  # [1,2] -> 13 (tie)
         # SetCoverage.Problem(k=2, S=[[7], [8, 7], [1, 2, 8]], W=[40, 1, 1, 1])  # [0, 2] -> 43
 
-        #MultiCover.Problem(k=2, S=[[7], [8, 7], [1, 2, 8]], W=[1, 1, 1, 5], C=[0, 2, 0, 0], T=[1, 1, 2])  # [1, 2] -> 8
-        #MultiCover.Problem(k=3, S=[[7], [8, 7], [1, 2, 8]], W=[1, 1, 1, 1], C=[0, 2, 0, 0], T=[2, 1, 1])  # NF
+        # MCMTW_MaxCoverage.Problem(k=1, S=[[1], [2]], W=[1, 2], C=[0, 0], T=[1, 1])
+        # MCMTW_MaxCoverage.Problem(k=2, S=[[7], [8, 7], [1, 2, 8]], W=[1, 1, 1, 5], C=[0, 2, 0, 0], T=[1, 1, 2])  # [1, 2] -> 8
+        # MultiCover.Problem(k=3, S=[[7], [8, 7], [1, 2, 8]], W=[1, 1, 1, 1], C=[0, 2, 0, 0], T=[2, 1, 1])  # NF
         # MultiCover.Problem(k=3, S=[[7], [8, 7], [1, 2, 8]], W=[1, 1, 1, 10], C=[2, 2, 0, 0], T=[1, 2, 3])  # [0, 1, 2] -> 13
-        #MultiCover.Problem(k=3, S=[[7], [8, 7], [1, 2, 8], [10, 11, 12, 13]],
+        # MultiCover.Problem(k=3, S=[[7], [8, 7], [1, 2, 8], [10, 11, 12, 13]],
         #                   W=[1, 1, 1, 10, 1, 1, 1, 1], C=[1, 2, 0, 0, 0, 0, 0, 0], T=[1, 2, 3, 4])  # [1, 2, 3] -> 17
-        #MultiCover.Problem(k=2, S=[[1], [2, 1], [3, 4]], W=[1, 1, 1, 100], C=[2, 0, 0, 0], T=[1, 2, 1])  # [0, 1] -> 2
-        #MultiCover.Problem(k=4, S=[[7], [8, 7], [1, 2, 8], [10, 11, 12, 13], [14, 15]],
+        # MultiCover.Problem(k=2, S=[[1], [2, 1], [3, 4]], W=[1, 1, 1, 100], C=[2, 0, 0, 0], T=[1, 2, 1])  # [0, 1] -> 2
+        # MultiCover.Problem(k=4, S=[[7], [8, 7], [1, 2, 8], [10, 11, 12, 13], [14, 15]],
         #                    W=[1, 1, 1, 10, 1, 1, 1, 1, 100, 5], C=[1, 2, 0, 0, 0, 0, 0, 0, 0, 0], T=[1, 2, 3, 4, 5]) # [1, 2, 3, 4] -> 122
-        #MultiCover.Problem(k=4, S=[[7], [8, 7], [1, 2, 8], [10, 11, 12, 13], [14, 15]],
+        # MCMTW_MaxCoverage.Problem(k=4, S=[[7], [8, 7], [1, 2, 8], [10, 11, 12, 13], [14, 15]],
         #                    W=[1, 1, 1, 10, 1, 1, 1, 1, 100, 5], C=[1, 2, 0, 0, 0, 0, 0, 0, 0, 0], T=[1, 1, 1, 4, 5]) # NF
     )
 
@@ -45,20 +47,18 @@ class Config:
     sas = [
         # SetCover.Greedy()
         # ExactCover.Greedy()
-        # SetCoverage.Greedy()
-        MCMTW_MaxCoverage.Greedy()
+        MaxCoverage.Greedy()
+        # MCMTW_MaxCoverage.Greedy()
     ]
 
     # Generic algorithms
     gas = [
         Model.BruteForce(),
         # Qiskit.NumpyExact(),
-        Qiskit.CPLEX(),  # make sure that CPLEX is installed
+        # Qiskit.CPLEX(),  # make sure that CPLEX is installed
         # Qiskit.DWaveAnnealer(),  # make sure that DWave tools / configuration is in place
         # Qiskit.VQE(quantum_instance=qdev, kwargs={'optimizer': COBYLA(1)}),
         # Qiskit.QAOA(quantum_instance=qdev, kwargs={'reps': 2, 'optimizer': COBYLA(1)})
     ]
 
     algos = sas + gas
-
-
