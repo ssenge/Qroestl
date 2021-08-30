@@ -54,11 +54,11 @@ class Problem(Model.Problem[TCandidate], QPConvertible, QuboConvertible, Operato
         #print(qp.export_as_lp_string())
         return qp
 
-    def to_qubo(self) -> QuadraticProgram:
-        return QuadraticProgramToQubo().convert(self.to_qp())
-
-    def to_op(self) -> "Operator":
-        return self.to_qubo().to_ising()[0]
+    # def to_qubo(self) -> QuadraticProgram:
+    #     return QuadraticProgramToQubo().convert(self.to_qp())
+    #
+    # def to_op(self) -> "Operator":
+    #     return self.to_qubo().to_ising()[0]
 
 
 class Generator:

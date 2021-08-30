@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Dict
 import numpy as np
 from qiskit_optimization import QuadraticProgram
 from qiskit_optimization.converters import QuadraticProgramToQubo
@@ -19,22 +19,23 @@ TCandidate = List[List[int]]  # this is more the "logical" type, in reality it i
 class Problem(Model.Problem[TCandidate], QPConvertible, QuboConvertible, OperatorConvertible):
     name: str = 'Max Set Coverage'
     k: int = 1
-    #U: Optional[List[int]] = None
+    U: Optional[List[int]] = None
     S: Optional[List[List[int]]] = None
     W: Optional[List[int]] = None
+    UW: Optional[Dict[List, int]] = None
 
     def __post_init__(self) -> None:
         self.S = np.array(self.S+[[]], dtype=object)
         self.S = self.S[:-1]
-        self.U = list(dict.fromkeys(Utils.union_non_sorted(self.S)))
+        self.U = self.U if self.U is not None else list(dict.fromkeys(Utils.union_non_sorted(self.S)))
         self.W = self.W if self.W is not None else [1]*len(self.U)
-        self.SW = {s: w for s, w in zip(self.U, self.W)}
+        self.UW = self.UW if self.UW is not None else {s: w for s, w in zip(self.U, self.W)}
 
     def feasible(self, c: TCandidate) -> bool:
         return len(c) <= self.k
 
     def cost(self, c: TCandidate) -> float:
-        return sum([self.SW[s] for s in Utils.union(self.S, c)])
+        return sum([self.UW[u] for u in Utils.union(self.S, c) if u in self.U])
 
     def all_solutions(self) -> List[TCandidate]:
         return Utils.powerset(range(len(self.S)))
@@ -65,13 +66,14 @@ class Greedy(Solver[TCandidate, Problem]):
     def solve_(self, p: Problem, s=Solution[TCandidate, Problem]()) -> Solution[TCandidate, Problem]:
 
         def rec(max_s=-1, i=min(len(p.S), p.k), U=p.U, S=p.S, W=p.W, sol=[]) -> TCandidate:
-            return sol if i == 0 else rec(
-                max_s := np.argmax([Problem(S=list(S), W=W).cost([s]) for s in range(len(S))]),
-                i-1,
-                np.setdiff1d(U, S[max_s]),
-                np.delete(S, max_s),
-                np.delete(W, max_s), # bug
-                sol + [Utils.where(p.S, S[max_s])])
+
+            return sol if i == 0 or len(U) == 0 else rec(
+                max_s := np.argmax([Problem(S=list(S), U=U, UW=p.UW).cost([s]) for s in range(len(S))]),
+                i=i-1,
+                U=np.setdiff1d(U, S[max_s]),
+                S=np.delete(S, max_s),
+                W=None,
+                sol=sol + [Utils.where(p.S, S[max_s])])
 
         return s.eval(p, rec())
 
