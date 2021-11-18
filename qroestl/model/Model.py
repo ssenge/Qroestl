@@ -4,30 +4,32 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace, field
 from datetime import datetime
 from functools import reduce
-from typing import List, TypeVar, Generic, Optional, Callable
+from typing import List, TypeVar, Generic, Optional, Tuple
 
-from qiskit_optimization import QuadraticProgram
-from qiskit_optimization.converters import QuadraticProgramToQubo
-
-from qroestl.utils import Utils
-
+import numpy as np
 
 TCandidate = TypeVar('Solution Candidate', bound='Solution')
+TProblem = TypeVar('Problem', bound='Problem')
+
+
+@dataclass
+class Approach(Generic[TProblem], ABC):
+    name: str
 
 
 class Problem(Generic[TCandidate], ABC):
-    name: Optional[str] = None
+    name: str = None
 
     @abstractmethod
     def feasible(self, c: TCandidate) -> bool:
         raise NotImplementedError
 
     @abstractmethod
-    def cost(self, c: TCandidate) -> float:
+    def value(self, c: TCandidate) -> float:
         raise NotImplementedError
 
     def better(self, c1: TCandidate, c2: TCandidate) -> bool:
-        return self.cost(c1) < self.cost(c2) if c1 and c2 else (True if c2 else False)
+        return self.value(c1) < self.value(c2) if c1 and c2 else (True if c2 else False)
 
     def superior(self, c1: TCandidate, c2: TCandidate) -> bool:
         return self.feasible(c2) and self.better(c1, c2)
@@ -36,60 +38,52 @@ class Problem(Generic[TCandidate], ABC):
         return []
 
 
-TProblem = TypeVar('Problem', bound='Problem')
-
 
 @dataclass
 class Solution(Generic[TCandidate, TProblem], ABC):
     best: (Optional[TCandidate], Optional[float]) = (None, None)
-    took: Optional[int] = None
+    wall_clock: Optional[int] = None
+    opt_clock: Optional[int] = None
+    optimizer_name: str = ''
 
     def eval(self, p: TProblem, c: TCandidate) -> Solution[TCandidate, TProblem]:
-        return replace(self, best=(c, p.cost(c)) if p.superior(self.best[0], c) else self.best)
+        return replace(self, best=(c, p.value(c)) if p.superior(self.best[0], c) else self.best)
 
-    def __str__(self):
-        return f'{self.best[0]} -> {self.best[1]} | {self.took}'
+    def to_list(self) -> str:
+        return [self.optimizer_name, self.best[1], self.wall_clock, self.opt_clock, self.best[0]]
+
+    def __str__(self) -> str:
+        return f'{self.optimizer_name : <20} obj: {self.best[1]} | wall clock: {self.wall_clock} | opt clock: {self.opt_clock} | sol: {np.array(self.best[0])}'
+
+
+class Converter:
+    def convert(self, p, a):
+        return p
 
 
 @dataclass
-class Solver(Generic[TCandidate, TProblem], ABC):
-    pre: List[Callable] = field(default_factory=lambda: [Utils.id])
-    post: List[Callable] = field(default_factory=lambda: [Utils.id])
-    name: str = None
+class Optimizer(Generic[TProblem, TCandidate], ABC):
+    name: str
+    converter: Converter = Converter()
+    kwargs: "kwargs" = field(default_factory=lambda: {})
 
-    def solve_(self, p: TProblem, c: Solution[TCandidate]) -> Solution[TCandidate]:
-        raise NotImplementedError
-
-    def solve(self, p: Problem) -> Solution[TCandidate]:
+    def optimize(self, p: TProblem, a: Optional[Approach] = None, c: Solution[TCandidate] = Solution[TCandidate, TProblem]()) -> Solution[TCandidate]:
         start = datetime.now()
-        solution = self.solve_(p)
+        solution, opt_clock = self.optimize_(p, self.converter.convert(p, a), a, c)
         end = datetime.now()
-        return replace(solution, took=end - start)
+        return replace(solution, wall_clock=(wc:=end - start), opt_clock=opt_clock if opt_clock else wc, optimizer_name=self.name)
+
+    @abstractmethod
+    def optimize_(self, p, p_conv, a, c) -> Tuple[Solution, int]:
+        raise NotImplementedError
 
     def __str__(self):
         return self.name
 
 
-class QPConvertible:
-    @abstractmethod
-    def to_qp(self) -> QuadraticProgram:
-        raise NotImplementedError
-
-
-class QuboConvertible:
-    @abstractmethod
-    def to_qubo(self) -> QuadraticProgram:
-        return QuadraticProgramToQubo().convert(self.to_qp())
-
-class OperatorConvertible:
-    @abstractmethod
-    def to_op(self) -> "Operator":
-        return self.to_qubo().to_ising()[0]
-
-
 @dataclass
-class BruteForce(Generic[TCandidate, TProblem], Solver[TCandidate, TProblem]):
+class BruteForce(Generic[TCandidate, TProblem], Optimizer[TCandidate, TProblem]):
     name: str = "BruteForce"
 
-    def solve_(self, p: Problem, s: Solution[TCandidate] = Solution[TCandidate, TProblem]()) -> Solution[TCandidate, TProblem]:
-        return reduce(lambda s, candidate: s.eval(p, candidate), p.all_solutions(), s)
+    def optimize_(self, p: Problem, p_conv, a: Optional[Approach] = None, s: Solution[TCandidate] = Solution[TCandidate, TProblem]()) -> Solution[TCandidate, TProblem]:
+        return reduce(lambda s, candidate: s.eval(p, candidate), p.all_solutions(), s), None

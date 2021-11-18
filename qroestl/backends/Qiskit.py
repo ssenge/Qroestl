@@ -1,92 +1,107 @@
 import warnings
+from abc import abstractmethod
 
 import numpy as np
+from qiskit import BasicAer
+from qiskit.providers.ibmq import IBMQ
+from qiskit_optimization import QuadraticProgram
+from qiskit_optimization.converters import QuadraticProgramToQubo
 
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
-from typing import Generic, TypeVar, Optional, List
-from dataclasses import dataclass, field
-from functools import reduce
+from typing import Generic, TypeVar
+from dataclasses import dataclass
 import qiskit
 from dwave.plugins.qiskit import DWaveMinimumEigensolver
 from qiskit.algorithms import NumPyMinimumEigensolver
-from qiskit.opflow.operator_base import OperatorBase
-from qiskit.optimization.applications.ising.common import sample_most_likely
 from qiskit.utils import QuantumInstance
-import qiskit_optimization
 from qiskit_optimization.algorithms import MinimumEigenOptimizer, CplexOptimizer
 from qroestl.utils import Utils
-from qroestl.model import Solver, Solution, QuboConvertible
-
-
+from qroestl.model import Optimizer, Converter
 
 TCandidate = TypeVar('Solution Candidate', bound='Solution')
 TProblem = TypeVar('Problem', bound='Problem')
 
 
+STATEVECTOR_SIM = QuantumInstance(BasicAer.get_backend('statevector_simulator'))
+
+
+class QiskitQuboConvertible(Generic[TCandidate, TProblem]):
+    def to_qiskit_qubo(self, p: TProblem) -> QuadraticProgram:
+        return QuadraticProgramToQubo().convert(self.to_qiskit_qp(p))
+
+
+class QiskitQPConvertible(Generic[TCandidate, TProblem]):
+    @abstractmethod
+    def to_qiskit_qp(self, p: TProblem) -> QuadraticProgram:
+        raise NotImplementedError
+
+
+class QiskitOperatorConvertible(Generic[TCandidate, TProblem]):
+    def to_qiskit_op(self, p: TProblem) -> "Operator":
+        return self.to_qiskit_qubo(p).to_ising()[0]
+
+
+class QUBOConverter(Converter):
+    def convert(self, p, a):
+        if isinstance(a, QiskitQuboConvertible):
+            return a.to_qiskit_qubo(p)
+        else:
+            raise ValueError('Approach not convertible to Qiskit QUBO')
+
+
 @dataclass
-class QiskitSolver(Generic[TCandidate, TProblem], Solver[TCandidate, TProblem]):
+class QiskitOptimizer(Generic[TCandidate, TProblem], Optimizer[TCandidate, TProblem]):
+    optimizer: "Qiskit-Optimizer" = None
+    name: str = 'Qiskit'
+    converter: Converter = QUBOConverter()
 
-    quantum_instance: Optional[QuantumInstance] = None
-    kwargs: "kwargs" = field(default_factory=lambda: {})
-
-    def solve_(self, p: TProblem, s=Solution[TCandidate, TProblem]()) -> Solution[TCandidate, TProblem]:
-        if isinstance(p, QuboConvertible):
-            p_converted = p.to_qubo()
-        pre = reduce(lambda x, f: f(x), self.pre, p_converted)
-        post = reduce(lambda x, f: f(x), self.post, self.run(pre))
-        return s.eval(p, Utils.bits2idx(len(p.S))(np.clip(np.rint(post), 0, 1)))
-
-
-class CanHandleOpsAndQPs:
-    def run(self, obj) -> List[int]:
-        if isinstance(obj, OperatorBase):
-            return sample_most_likely(self.algo.compute_minimum_eigenvalue(obj).eigenstate)
-        elif isinstance(obj, qiskit_optimization.QuadraticProgram) or isinstance(obj, qiskit.optimization.QuadraticProgram):
-            return self.mes.solve(obj).x
+    def optimize_(self, p, p_conv, a, s):
+        res = self.optimizer.solve(p_conv).x
+        return s.eval(p, Utils.bits2idx(len(p.S))(np.clip(np.rint(res), 0, 1))), None
 
 
 @dataclass
-class QAOA(Generic[TCandidate, TProblem], QiskitSolver[TCandidate, TProblem], CanHandleOpsAndQPs):
-    name: str = "Qiskit-QAOA"
+class QAOA(Generic[TCandidate, TProblem], QiskitOptimizer[TCandidate, TProblem]):
+    #qdev: 'Dev' = QuantumInstance(BasicAer.get_backend('statevector_simulator'))
+    qdev: 'Dev' = None
 
     def __post_init__(self) -> None:
-        self.algo = qiskit.algorithms.QAOA(**self.kwargs, quantum_instance=self.quantum_instance)
-        self.mes = MinimumEigenOptimizer(self.algo)
+        self.name: str = self.name + "-QAOA"
+        self.qdev = IBMQ.load_account().get_backend('ibmq_brooklyn')
+        self.algo = qiskit.algorithms.QAOA(**self.kwargs, quantum_instance=self.qdev)
+        self.optimizer = MinimumEigenOptimizer(self.algo)
 
 
 @dataclass
-class VQE(Generic[TCandidate, TProblem], QiskitSolver[TCandidate, TProblem], CanHandleOpsAndQPs):
-    name: str = "Qiskit-VQE"
-
+class VQE(Generic[TCandidate, TProblem], QiskitOptimizer[TCandidate, TProblem]):
     def __post_init__(self) -> None:
-        self.algo = qiskit.algorithms.VQE(**self.kwargs, quantum_instance=self.quantum_instance)
-        self.mes = MinimumEigenOptimizer(self.algo)
+        self.name: str = self.name + "-VQE"
+        self.algo = qiskit.algorithms.VQE(**self.kwargs, quantum_instance=self.qdev)
+        self.optimizer = MinimumEigenOptimizer(self.algo)
 
 
 @dataclass
-class NumpyExact(Generic[TCandidate, TProblem], QiskitSolver[TCandidate, TProblem], CanHandleOpsAndQPs):
-    name: str = "Qiskit-NumpyExact"
-
+class NumpyExact(Generic[TCandidate, TProblem], QiskitOptimizer[TCandidate, TProblem]):
     def __post_init__(self) -> None:
-        self.algo = NumPyMinimumEigensolver(**self.kwargs)
-        self.mes = MinimumEigenOptimizer(self.algo)
+        self.name: str = self.name + "-NumpyExact"
+        self.optimizer = MinimumEigenOptimizer(NumPyMinimumEigensolver(**self.kwargs))
 
 
 @dataclass
-class CPLEX(Generic[TCandidate, TProblem], QiskitSolver[TCandidate, TProblem], CanHandleOpsAndQPs):
-    name: str = "Qiskit-CPLEX"
-
+class CPLEX(Generic[TCandidate, TProblem], QiskitOptimizer[TCandidate, TProblem]):
     def __post_init__(self) -> None:
-        self.algo = CplexOptimizer()
-        self.mes = self.algo
+        self.name: str = self.name + "-CPLEX"
+        self.optimizer = CplexOptimizer()
+
 
 @dataclass
-class DWaveAnnealer(Generic[TCandidate, TProblem], QiskitSolver[TCandidate, TProblem], CanHandleOpsAndQPs):
-    name: str = "Qiskit-DWaveAnnealer"
-
+class DWaveAnnealer(Generic[TCandidate, TProblem], QiskitOptimizer[TCandidate, TProblem]):
     def __post_init__(self) -> None:
+        self.name: str = self.name + "-DWave"
         self.pre += [Utils.convert_qubo_to_legacy]
         self.algo = DWaveMinimumEigensolver(**self.kwargs)
         from qiskit.optimization.algorithms import MinimumEigenOptimizer
         self.mes = MinimumEigenOptimizer(self.algo)
+
+
