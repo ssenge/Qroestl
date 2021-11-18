@@ -1,5 +1,5 @@
 # Qroestl
-A thin optimization layer on top of Qiskit. Named after the delicious Austrian & Bavarian dish [Gröstl](https://de.wikipedia.org/wiki/Tiroler_Gröstl) which I ate when I started this ;-)
+A thin optimization layer on top of common QC libraries. Named after the delicious Austrian & Bavarian dish [Gröstl](https://de.wikipedia.org/wiki/Tiroler_Gröstl) which I ate when I started this project ;-)
 
 ## Install
 
@@ -30,11 +30,11 @@ Optionally, if you want to use CPLEX install it according to the official [docum
 
 ## Setup
 
-If you want to use IBM Q / IonQ / DWave cloud services, sign up on the respective web page and follow the instructions to get the required _api token_.
+If you want to use IBM Q / IonQ / DWave / Braket cloud services, sign up on the respective web page and follow the instructions to get the required _api token_.
 
 ## Config
 
-Open [conf/Config.py](samples/Config.py) and setup the problem to solve. Finally, run:
+Open [conf/Config.py](run/Config.py) and setup the problem to solve. Finally, run:
 
 ```bash
 $ python Main.py
