@@ -5,7 +5,7 @@ import setuptools
 
 setuptools.setup(
     name="Qroestl",
-    version="0.1.7",
+    version="0.1.8",
     author="Sebastian Senge",
     author_email="ssenge.public@gmail.com",
     description="A thin optimization layer on top of Qiskit.",

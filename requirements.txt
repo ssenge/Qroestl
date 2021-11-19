@@ -9,12 +9,12 @@ aniso8601==8.1.0
 appdirs==1.4.4
 asgiref==3.3.4
 astunparse==1.6.3
-attrs @ file:///tmp/build/80754af9/attrs_1620827162558/work
+attrs
 autograd==1.3
 autoray==0.2.5
 backoff==1.10.0
 bleach==3.2.2
-blis @ file:///opt/concourse/worker/volumes/live/f9b87811-6932-46c2-6826-5aef90cfc1ba/volume/cython-blis_1594246874825/work
+blis
 boltons==20.2.1
 boto3==1.19.5
 boto3-stubs==1.15.1.0
@@ -23,7 +23,7 @@ brotlipy==0.7.0
 cachetools==4.2.1
 catalogue==1.0.0
 certifi==2021.10.8
-cffi @ file:///opt/concourse/worker/volumes/live/506ff722-306a-4142-6379-cfea99aadbed/volume/cffi_1625814701363/work
+cffi
 chardet==3.0.4
 charset-normalizer==2.0.4
 cirq==0.9.1
@@ -34,9 +34,9 @@ cloudpickle==1.6.0
 colorama==0.4.4
 coverage==5.5
 cplex==20.1.0.0
-cryptography @ file:///opt/concourse/worker/volumes/live/aaebf160-6f21-467e-6bfa-1dd2605e4a9c/volume/cryptography_1635366587701/work
+cryptography
 cycler==0.10.0
-cymem @ file:///opt/concourse/worker/volumes/live/4097c5b0-7ead-4af2-417f-f93ff176ec70/volume/cymem_1605062271900/work
+cymem
 Cython==0.29.21
 dataclasses==0.6
 dataclasses-json==0.5.2
@@ -135,7 +135,7 @@ PennyLane-Lightning==0.19.0
 Pillow==7.2.0
 Pint==0.16
 pkginfo==1.7.0
-plac @ file:///opt/concourse/worker/volumes/live/b396e4ca-d114-4800-41a2-71d753ee926d/volume/plac_1594261971168/work
+plac
 plucky==0.4.3
 pluggy==0.13.1
 ply==3.11
@@ -147,16 +147,16 @@ py==1.9.0
 pyasn1==0.4.8
 pyasn1-modules==0.2.8
 pybind11==2.7.1
-pycparser @ file:///tmp/build/80754af9/pycparser_1594388511720/work
+pycparser
 pydantic==1.8.2
 pyglet==1.5.0
 Pygments==2.7.3
 pylatexenc==2.7
-pyOpenSSL @ file:///tmp/build/80754af9/pyopenssl_1606517880428/work
+pyOpenSSL
 pyparsing==2.4.7
 pyqubo==1.0.13
-pyrsistent @ file:///opt/concourse/worker/volumes/live/ff11f3f0-615b-4508-471d-4d9f19fa6657/volume/pyrsistent_1600141727281/work
-PySocks @ file:///opt/concourse/worker/volumes/live/85a5b906-0e08-41d9-6f59-084cee4e9492/volume/pysocks_1594394636991/work
+pyrsistent
+PySocks
 pytest==6.1.2
 pytest-flask==1.1.0
 python-constraint==1.4.0
@@ -230,4 +230,4 @@ wrapt==1.12.1
 xxhash==2.0.0
 yamldataclassconfig==1.5.0
 yfinance==0.1.54
-zipp @ file:///tmp/build/80754af9/zipp_1604001098328/work
+zipp
