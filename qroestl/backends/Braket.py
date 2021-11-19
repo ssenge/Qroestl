@@ -6,7 +6,7 @@ from dwave.system import EmbeddingComposite, DWaveSampler
 import dwave.inspector
 from qroestl.backends.Ocean import OceanOptimizer, OceanCQMToBQMConverter
 from qroestl.model import TCandidate, TProblem, Converter
-from run import Config
+from run import BackendConfig
 
 
 @dataclass
@@ -15,5 +15,5 @@ class DWave(Generic[TCandidate, TProblem], OceanOptimizer[TCandidate, TProblem])
     converter: Converter = OceanCQMToBQMConverter()
 
     def __post_init__(self) -> None:
-        self.sampler = BraketDWaveSampler(Config.AWS_S3_BUCKET, Config.qdev)
+        self.sampler = BraketDWaveSampler(BackendConfig.BRAKET_S3_BUCKET, BackendConfig.qdev)
         self.sampler = EmbeddingComposite(self.sampler)

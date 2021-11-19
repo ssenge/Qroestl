@@ -34,7 +34,7 @@ If you want to use IBM Q / IonQ / DWave / Braket cloud services, sign up on the 
 
 ## Config
 
-Open [conf/Config.py](run/Config.py) and setup the problem to solve. Finally, run:
+Open [conf/Config.py](run/TaskConfig.py) and setup the problem to solve. Finally, run:
 
 ```bash
 $ python Main.py

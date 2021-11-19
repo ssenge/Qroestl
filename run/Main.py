@@ -4,9 +4,10 @@ import warnings
 from datetime import datetime
 import numpy as np
 
+from run import TaskConfig
+
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
-from run.Config import Config
 
 def output(msg):
     print(msg)
@@ -19,13 +20,13 @@ if __name__ == '__main__':
             writer = csv.writer(fp)
             fp.write("# Optimizer name, objective value, wall clock, opt clock, solution\n")
             output(f'Start at {datetime.now()}')
-            for t in Config.tasks:
+            for t in TaskConfig.tasks:
                 p, approaches = t
                 output(f'New problem at {datetime.now()}')
                 output(p)
                 for a in approaches:
                     output(f'New approach {a} at {datetime.now()}')
-                    for optimizer in Config.optimizers:
+                    for optimizer in TaskConfig.optimizers:
                         sol = optimizer.optimize(p, a)
                         writer.writerow(sol.to_list())
                         print(str(sol))

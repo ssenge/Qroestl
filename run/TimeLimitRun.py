@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from qroestl.backends import Qiskit
 from qroestl.model import Model
 from qroestl.problems import MCMTWB_k_MaxCover
-from run.Config import Config
+from run.TaskConfig import TaskConfig
 
 
 limit = 60  # sec
