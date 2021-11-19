@@ -7,6 +7,8 @@ from qiskit.providers.ibmq import IBMQ
 from qiskit_optimization import QuadraticProgram
 from qiskit_optimization.converters import QuadraticProgramToQubo
 
+from run import BackendConfig
+
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
 from typing import Generic, TypeVar
@@ -68,7 +70,8 @@ class QAOA(Generic[TCandidate, TProblem], QiskitOptimizer[TCandidate, TProblem])
 
     def __post_init__(self) -> None:
         self.name: str = self.name + "-QAOA"
-        self.qdev = IBMQ.load_account().get_backend('ibmq_brooklyn')
+        #self.qdev = IBMQ.load_account().get_backend('ibmq_brooklyn')
+        self.qdev = BackendConfig.qdev
         self.algo = qiskit.algorithms.QAOA(**self.kwargs, quantum_instance=self.qdev)
         self.optimizer = MinimumEigenOptimizer(self.algo)
 
