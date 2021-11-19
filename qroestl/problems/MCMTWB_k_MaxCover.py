@@ -390,9 +390,9 @@ class Greedy(Optimizer[TCandidate, Problem]):
         return s_.eval(p, sol), datetime.now() - start
 
 
-def to_consecutive(k, S, R, T, W) -> Problem:
+def to_consecutive(k, S, R, T, W, P, B) -> Problem:
     uid = defaultdict(lambda: len(uid))
-    return Problem(nU=len(unique(flatten2d(S))), nS=len(S), k=k, R=R, T=T, W=W, C=[[uid[u] for u in s] for s in S])
+    return Problem(nU=len(unique(flatten2d(S))), nS=len(S), k=k, R=R, T=T, W=W, P=P, B=B, C=[[uid[u] for u in s] for s in S])
 
 
 def gen_syn_one_to_one(nS: int, k) -> Problem:
