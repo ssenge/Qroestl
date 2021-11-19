@@ -20,7 +20,7 @@ class CplexConverter(Converter):
             raise ValueError('Approach not convertible to Cplex Model')
 
 @dataclass
-class CplexOptimizer(Generic[TCandidate, TProblem], Optimizer[TCandidate, TProblem]):
+class Optimizer(Generic[TCandidate, TProblem], Optimizer[TCandidate, TProblem]):
     name: str = "Cplex-Local"
     kwargs: "kwargs" = field(default_factory=lambda: {})
     converter: Converter = CplexConverter()
