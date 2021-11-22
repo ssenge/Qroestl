@@ -261,7 +261,8 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
                     m.linear_constraint(
                         linear={**{f's{s}': -1 for s in p.u_ss[u] if p.T[s] == t}, **{f'u{u}t{t}': 1}}, sense='<=', rhs=0, name=f'type cover u{u}t{t}')
 
-        # H, offset = QuadraticProgramToQubo().convert(m).to_ising()
+        H, offset = QuadraticProgramToQubo().convert(m).to_ising()
+        print(H)
         # qubo = QuadraticProgramToQubo().convert(m)
         # print(f'#Vars: {m.get_num_binary_vars()} -> {qubo.get_num_binary_vars()}')
         return m
@@ -416,21 +417,26 @@ def gen_syn_random(max_nU: int, max_nS: int, k: int) -> Problem:
                    C=[random.sample(range(nU), k=randint(1, nU)) for _ in range(nS)])
 
 
-def gen_syn_random_coverages(nU, nS, k, T):
+def gen_syn_random_coverages(nU, nS, k, T=None, maxU=None):
     if nU < 1:
         return None
     if nS <= 1:
         nS = max(1, int(nS * nU))
     if k <= 1:
         k = max(1, int((k * nS) / 10))
-    if T < 0:
+    if T is None:
         T = list(range(nS))
     else:
-        T = [T] * nS
+        T = [1] * nS
+    if maxU is None:
+        maxU = nS
 
     C = defaultdict(list)
-    for i in range(nU):
-        C_s = random.sample(range(nS), k=randint(1, nS))
-        for u in C_s:
-            C[u].append(i)
+    # for i in range(nU):
+    #     C_s = random.sample(range(nS), k=randint(1, maxS))
+    #     for u in C_s:
+    #         C[u].append(i)
+    for s in range(nS):
+        #C[s].append(random.sample(range(nU), k=maxU))#randint(1, maxS)))
+        C[s] = list(set(random.sample(range(nU), k=maxU)))
     return Problem(nU, nS, k=k, R=[0] * nU, T=T, W=list(random.choices(range(1, nU), k=max(nU, min(nS, nU)))), C=C.values())

@@ -75,22 +75,22 @@ class OceanOptimizer(Generic[TCandidate, TProblem], Optimizer[TCandidate, TProbl
         pass
 
     def optimize_(self, p, p_conv, a, s):
-        #import dwave.inspector  # do not remove this import, required for dwave.inspector.get_embedding, even though it is not used
+        import dwave.inspector  # do not remove this import, required for dwave.inspector.get_embedding, even though it is not used
         #result = self.sampler.sample(p_conv, num_reads=100)
         result = self.sample(p_conv)
-        #embedding = result.info['embedding_context']['embedding']
+        embedding = result.info['embedding_context']['embedding']
 
         #Ocean.HybridBQM: result.info['run_time']  # microseconds?
         #Ocean.BQM: result.info['timing']['qpu_access_time'] + result.info['timing']['post_processing_overhead_time']  # microseconds
         #Ocean.BQM-Clique: result.info['timing']['qpu_access_time'] + result.info['timing']['post_processing_overhead_time']  # microseconds
         # Braket.BQM: result.info['additionalMetadata']['dwaveMetadata']['timing']['qpu_access_time'] + result.info['additionalMetadata']['dwaveMetadata']['timing']['post_processing_overhead_time']  # microseconds
-
+        #dwave.inspector.show(bqm=p_conv, sampleset=result)
         proc_time = self.time(result)
         #proc_time = result.info['timing']['qpu_access_time'] + result.info['timing']['post_processing_overhead_time']  # microseconds
         result = result.first.sample
         #print(f"Number of logical variables: {len(embedding.keys())}")
         #print(f"Number of physical qubits used in embedding: {sum(len(chain) for chain in embedding.values())}")
-        #dwave.inspector.show(bqm=p_conv, sampleset=result)
+
 
         if isinstance(self.converter, OceanCQMToBQMConverter):
             result = self.converter.invert(result)

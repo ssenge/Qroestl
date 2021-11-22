@@ -1,12 +1,15 @@
 import time
 
-from qroestl.backends import Gurobi
+from qroestl.backends import Gurobi, Ocean
 from qroestl.problems import MCMTWB_k_MaxCover
 
-max_i = 10
+import warnings
+warnings.filterwarnings("ignore")
+
+max_i = 500
 
 a = MCMTWB_k_MaxCover.Standard()
-greedy = MCMTWB_k_MaxCover.Greedy()
+greedy = Ocean.Tabu()#MCMTWB_k_MaxCover.Greedy()
 gurobi = Gurobi.Optimizer()
 
 errors = 0
@@ -20,6 +23,7 @@ with open(f'results/greedy_comparison_{now}.csv', "wt") as fp:
         p = MCMTWB_k_MaxCover.gen_syn_random_coverages(nU=i, nS=0.1, k=1, T=1)
         sol_greedy = greedy.optimize(p, a)
         obj_greedy = sol_greedy.best[1]
+        obj_greedy = obj_greedy if obj_greedy else 0
         sol_gurobi = gurobi.optimize(p, a)
         obj_gurobi = sol_gurobi.best[1]
         total_obj_greedy += obj_greedy
