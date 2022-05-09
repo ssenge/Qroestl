@@ -10,7 +10,7 @@ $ git clone https://github.com/ssenge/Qroestl.git
 
 Then create an environment, e.g. using _conda_:
 ```bash
-$ conda create -n qc  python=3.8
+$ conda create -n qc  python=3.9
 ```
 
 (Note that it seems as the latest version of CPLEX does not work with Python 3.9, so use 3.8 if you want to use CPLEX.)
@@ -23,7 +23,7 @@ $ conda activate qc
 
 Install requirements:
 ```bash
-$ pip install -r requirements.txt
+$ pip install -r requirements_old.txt
 ```
 
 Optionally, if you want to use CPLEX install it according to the official [documentation](https://www.ibm.com/products/ilog-cplex-optimization-studio).
@@ -34,7 +34,7 @@ If you want to use IBM Q / IonQ / DWave / Braket cloud services, sign up on the 
 
 ## Config
 
-Open [conf/Config.py](run/TaskConfig.py) and setup the problem to solve. Finally, run:
+Open [conf/TaskConfig.py](run/TaskConfig.py) and setup the problem to solve. Finally, run:
 
 ```bash
 $ python Main.py
