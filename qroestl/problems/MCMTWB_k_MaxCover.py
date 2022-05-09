@@ -261,8 +261,8 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
                     m.linear_constraint(
                         linear={**{f's{s}': -1 for s in p.u_ss[u] if p.T[s] == t}, **{f'u{u}t{t}': 1}}, sense='<=', rhs=0, name=f'type cover u{u}t{t}')
 
-        H, offset = QuadraticProgramToQubo().convert(m).to_ising()
-        print(H)
+        #H, offset = QuadraticProgramToQubo().convert(m).to_ising()
+        #print(H)
         # qubo = QuadraticProgramToQubo().convert(m)
         # print(f'#Vars: {m.get_num_binary_vars()} -> {qubo.get_num_binary_vars()}')
         return m
@@ -335,6 +335,53 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
 
     def extract(self, result_dict):
         return sorted({k: v for k, v in result_dict.items() if k.startswith('s')}.values())
+
+
+@dataclass
+class Heuristic1(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertible, QiskitOperatorConvertible, GurobiModelConvertible):
+    name: str = "MCMTWB-k-MaxCover Heuristic1"
+
+    def to_qiskit_qp(self, p: Problem) -> QuadraticProgram:
+        uts = [f'u{u}t{t}' for u in p.U if p.R[u] > 0 for t in p.u_ts[u]]
+
+        alpha = 1
+        beta = 1
+        R_low = [1]
+        R_high = [0]
+        R = R_low + R_high
+        Srs = {0: {0: 0.6, 1: 0.15, 2: 0.2}, 1: {2: 0.2}}
+
+
+
+        m = QuadraticProgram(self.name)
+        m.binary_var_list(p.S, name='s')
+        m.binary_var_list(p.U, name='u')
+        m.binary_var_list(uts, name='')
+        # m.maximize(linear=([-1] * p.nS) + p.W_offset + ([0] * len(uts)))  # note: all vars appear in obj (in the order as added above, hence, zero coeffs are required)
+        #m.minimize(linear=([1] * p.nS) + ([-w for w in p.W_offset]) + ([0] * len(uts)))
+        m.maximize(constant=0,
+                   linear={f's{sc}': sc for i in R_low for sc in Srs[i]},
+                   quadratic=[])
+
+        # m.maximize(linear=([-p for p in p.P_normalized] + p.W_offset + ([0] * len(uts))), constant=p.B_normalized)  # note: all vars appear in obj (in the order as added above, hence, zero coeffs are required)
+        m.linear_constraint(linear={f's{s}': 1 for s in p.S}, sense='<=', rhs=p.k, name='max k sets')  # equality constraint instead of less than as the used in a loop over k
+        # m.linear_constraint(linear={f's{s}': p.P[s] for s in p.S}, sense='<=', rhs=p.B, name='max budget')
+        for u in p.U:
+            m.linear_constraint(linear={**{f's{s}': 1 for s in p.S if u in p.s_us[s]}, **{f'u{u}': -1}}, sense='>=', rhs=0, name=f'cover for u{u}')
+            # This implements a "must multi cover" policy
+            # "Should multi cover": u{u} coefficient needs to be -1*self.SC[u] above (and the 'multi cover u{u}' constraint below can be removed)
+            if (c := p.R[u]) > 0:
+                m.linear_constraint(linear={**{f's{s}': 1 for s in p.S if u in p.s_us[s]}}, sense='>=', rhs=c, name=f'multi cover for u{u}')
+                m.linear_constraint(linear={f'u{u}t{t}': 1 for t in p.u_ts[u]}, sense='>=', rhs=c, name=f'min {c} types for u{u}')
+                for t in p.u_ts[u]:
+                    m.linear_constraint(
+                        linear={**{f's{s}': -1 for s in p.u_ss[u] if p.T[s] == t}, **{f'u{u}t{t}': 1}}, sense='<=', rhs=0, name=f'type cover u{u}t{t}')
+
+        #H, offset = QuadraticProgramToQubo().convert(m).to_ising()
+        #print(H)
+        # qubo = QuadraticProgramToQubo().convert(m)
+        # print(f'#Vars: {m.get_num_binary_vars()} -> {qubo.get_num_binary_vars()}')
+        return m
 
 
 @dataclass

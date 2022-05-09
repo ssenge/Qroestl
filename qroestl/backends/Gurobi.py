@@ -25,7 +25,7 @@ class Converter(Converter):
         if isinstance(a, GurobiModelConvertible):
             return a.to_gurobi_model(p)
         else:
-            raise ValueError('Approach not convertible to Cplex Model')
+            raise ValueError('Approach not convertible to Gurobi Model')
 
 
 @dataclass
