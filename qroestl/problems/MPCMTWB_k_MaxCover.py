@@ -38,14 +38,14 @@ class Problem(Model.Problem[TCandidate]):
     nU: int  # number of universe elements
     nS: int  # number of sets
     k: int  # max number of sets to be selected
-    C1: List[Dict[int, float]]  # partially covered universe elements (per universe element)
-    C2: List[Dict[Tuple[int, int], float]]  # covered universe elements (per set)
     R: Optional[List[int]] = None  # required covers (per universe element)
+    C: List[List[Dict[List[int], float]]] = None  # partially covered universe elements (per universe element)
+    RC: Optional[List[float]] = None
     T: Optional[List[int]] = None  # type (per set)
     W: Optional[List[float]] = None  # weight (per universe element)
     P: Optional[List[float]] = None  # price (per set)
     B: Optional[float] = None  # max budget
-    name: str = 'Multi Cover Multi Type Weighted Budgeted k-Max Set Cover'
+    name: str = 'Multi Partial Cover Multi Type Weighted Budgeted k-Max Set Cover'
 
     def __post_init__(self) -> None:
         if not self.R:
@@ -62,7 +62,7 @@ class Problem(Model.Problem[TCandidate]):
         self.U = list(range(self.nU))
         self.S = list(range(self.nS))
 
-        self.u_ss = {u: list(ss.keys()) for u, ss in enumerate(self.C1)}
+        self.u_ss = {u: [s[0] for s in ss.keys()] for u, ss in enumerate(self.C[0])}
         self.s_us = {s: [u for u, ss in self.u_ss.items() if s in ss] for s in self.S}
 
         # self.u_ts = {u: list(set([self.T[s] for s in self.u_ss[u]])) for u in self.U}  # u -> types (of sets that cover u)
@@ -72,7 +72,7 @@ class Problem(Model.Problem[TCandidate]):
         # self.B_normalized = sum(self.P_normalized)
 
     def __str__(self):
-        return f'nU={self.nU} nS={self.nS} k={self.k} B={self.B}\nW={np.array(self.W)}\nR={np.array(self.R)}\nT={np.array(self.T)}\nP={np.array(self.P)}\nC1={np.array(self.C1)}\nC2={np.array(self.C2)}'
+        return f'nU={self.nU} nS={self.nS} k={self.k} B={self.B}\nW={np.array(self.W)}\nR={np.array(self.R)}\nT={np.array(self.T)}\nP={np.array(self.P)}\nC={np.array(self.C)}'
 
     def _validate(self):
         # assert self.nU == len(self.U)
@@ -84,12 +84,31 @@ class Problem(Model.Problem[TCandidate]):
         assert self.B >= 0
 
     def feasible(self, c: TCandidate) -> bool:
-        return True
+        # For general comments on this approach, see the MCMTWB problem
+
+        # 1 - Check for max k
+        if len(c) > self.k or sum(self.P[s] for s in c) > self.B:
+            return False
+
+        # 2 - Check for multi type cover (works currently only for double covers)
+
+        # Helper
+        def is_covered(u):
+            return np.any(list(map(
+                # check if required cover (with minimum RC value) is given
+                lambda ssv: ssv[1] >= self.RC[u] and set(ssv[0]).issubset(c),
+                # extract all sets-value tuples (ssv) from Cn where n depends on the required cover
+                [ssv for ssvs in self.C[self.R[u]-1] for ssv in ssvs.items()])))
+
+        # Actual check
+        return not np.any(list(map(
+            lambda u: not is_covered(u),
+            [u for u in self.U if self.R[u] > 0])))
+
 
     def value(self, c: TCandidate) -> float:
-        c1_sum = sum(c1[s] for s in c for c1 in self.C1 if s in c1)
-        # TODO: c2_sum
-        return c1_sum # + c2_sum
+        # Sum up all C1 values if the set is in the candidate
+        return sum(c_dict[1] for c1 in self.C[0] for c_dict in c1.items() for s in c if c_dict[0][0] == s)
 
 
     def all_solutions(self) -> List[TCandidate]:
@@ -109,14 +128,14 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
         us_C1 = [u for u, r in enumerate(p.R) if r <= 1]
         us_C2 = [u for u, r in enumerate(p.R) if r >= 2]
 
-        covers1 = [sc for u in us_C1 for sc in p.C1[u].items()]
-        covers2 = [sc for u in us_C2 for sc in p.C2[u].items()]
+        covers1 = [sc for u in us_C1 for sc in p.C[0][u].items()]
+        covers2 = [sc for u in us_C2 for sc in p.C[1][u].items()]
 
         m = QuadraticProgram(self.name)
         m.binary_var_list(p.S, name='s')
         m.binary_var_list(p.U, name='u')
 
-        m.maximize(linear={f's{s}': alpha * c for s, c in covers1},  # *-1
+        m.maximize(linear={f's{s[0]}': alpha * c for s, c in covers1},  # *-1
                    quadratic={**{(f's{s1_s2[0]}', f's{s1_s2[1]}'): beta * c_s1_s2 for s1_s2, c_s1_s2 in covers2},
                               # **{(f's{s1_s2[0]}', f's{s1_s2[1]}'): 1 for s1_s2, c_s1_s2 in covers2}
                               },

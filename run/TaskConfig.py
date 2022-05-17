@@ -7,15 +7,17 @@ from qroestl.problems import MCMTWB_k_MaxCover, MPCMTWB_k_MaxCover
 tasks = [
     #(MCMTWB_k_MaxCover.gen_syn_fully_connected(20, 20), [MCMTWB_k_MaxCover.Standard()]),
     #(MCMTWB_k_MaxCover.Problem(nU=4, nS=3, k=2, R=[0, 0, 0, 0], T=[0, 0, 0], W=[1, 2.1, 1, 1], C=[[0], [1], [2, 3]]), [MCMTWB_k_MaxCover.Heuristic1()]),
-    (MPCMTWB_k_MaxCover.Problem(nU=2, nS=3, k=2, R=[2, 0], T=[0, 1, 0], W=[1, 1],
-                                C1=[{0: 0.6, 1: 0.15, 2: 0.2}, {2: 0.2}],  # u | s -> coverage
-                                C2=[{(1, 2): 0.1}, {}]),  # u | (s1, s2) -> joint coverage
+    (MPCMTWB_k_MaxCover.Problem(nU=2, nS=3, k=2, R=[2, 0], RC=[0.1, 0], T=[0, 1, 0], W=[1, 1],
+                                C=[  # List of dicts from tuple of sets to coverage
+                                    [{(0,): 0.6, (1,): 0.15, (2,): 0.2}, {(2,): 0.2}],
+                                    [{(1, 2): 0.1}, {}]
+                                ]),
                                 [MPCMTWB_k_MaxCover.Standard()]),
 ]
 
 optimizers = [
     ### Qroestl
-    #Model.BruteForce(),
+    Model.BruteForce(),
     #MCMTWB_k_MaxCover.Greedy(),
 
     ### Qiskit
