@@ -6,8 +6,6 @@ from datetime import datetime
 from functools import reduce
 from typing import List, TypeVar, Generic, Optional, Tuple
 
-import numpy as np
-
 TCandidate = TypeVar('Solution Candidate', bound='Solution')
 TProblem = TypeVar('Problem', bound='Problem')
 
@@ -53,7 +51,7 @@ class Solution(Generic[TCandidate, TProblem], ABC):
         return [self.optimizer_name, self.best[1], self.wall_clock, self.opt_clock, self.best[0]]
 
     def __str__(self) -> str:
-        return f'{self.optimizer_name : <20} obj: {self.best[1]} | wall clock: {self.wall_clock} | opt clock: {self.opt_clock} | sol: {np.array(self.best[0])}'
+        return f'{self.optimizer_name : <20} obj: {self.best[1]} | wall clock: {self.wall_clock} | opt clock: {self.opt_clock} | sol: {(self.best[0])}'
 
 
 class Converter:
@@ -69,7 +67,9 @@ class Optimizer(Generic[TProblem, TCandidate], ABC):
 
     def optimize(self, p: TProblem, a: Optional[Approach] = None, c: Solution[TCandidate] = Solution[TCandidate, TProblem]()) -> Solution[TCandidate]:
         start = datetime.now()
-        solution, opt_clock = self.optimize_(p, self.converter.convert(p, a), a, c)
+        p_conv = self.converter.convert(p, a)
+        print(f'Starting actual optimization at {start}')
+        solution, opt_clock = self.optimize_(p, p_conv, a, c)
         end = datetime.now()
         return replace(solution, wall_clock=(wc:=end - start), opt_clock=opt_clock if opt_clock else wc, optimizer_name=self.name)
 

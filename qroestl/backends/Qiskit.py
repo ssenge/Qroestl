@@ -17,7 +17,7 @@ import qiskit
 from dwave.plugins.qiskit import DWaveMinimumEigensolver
 from qiskit.algorithms import NumPyMinimumEigensolver
 from qiskit.utils import QuantumInstance
-from qiskit_optimization.algorithms import MinimumEigenOptimizer, CplexOptimizer
+from qiskit_optimization.algorithms import MinimumEigenOptimizer, CplexOptimizer, GurobiOptimizer
 from qroestl.utils import Utils
 from qroestl.model import Optimizer, Converter
 
@@ -60,12 +60,12 @@ class QiskitOptimizer(Generic[TCandidate, TProblem], Optimizer[TCandidate, TProb
 
     def optimize_(self, p, p_conv, a, s):
         res = self.optimizer.solve(p_conv).x
+        print("Solver res=", res)
         return s.eval(p, Utils.bits2idx(len(p.S))(np.clip(np.rint(res), 0, 1))), None
 
 
 @dataclass
 class QAOA(Generic[TCandidate, TProblem], QiskitOptimizer[TCandidate, TProblem]):
-    #qdev: 'Dev' = QuantumInstance(BasicAer.get_backend('statevector_simulator'))
     qdev: 'Dev' = None
 
     def __post_init__(self) -> None:
@@ -96,6 +96,12 @@ class CPLEX(Generic[TCandidate, TProblem], QiskitOptimizer[TCandidate, TProblem]
     def __post_init__(self) -> None:
         self.name: str = self.name + "-CPLEX"
         self.optimizer = CplexOptimizer()
+
+@dataclass
+class Gurobi(Generic[TCandidate, TProblem], QiskitOptimizer[TCandidate, TProblem]):
+    def __post_init__(self) -> None:
+        self.name: str = self.name + "-Gurobi"
+        self.optimizer = GurobiOptimizer()
 
 
 @dataclass

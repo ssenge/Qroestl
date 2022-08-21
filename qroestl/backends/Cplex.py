@@ -26,7 +26,7 @@ class Optimizer(Generic[TCandidate, TProblem], Optimizer[TCandidate, TProblem]):
     converter: Converter = CplexConverter()
 
     def optimize_(self, p: TProblem, p_conv, a: Approach, s=Solution[TCandidate, TProblem]()) -> Solution[TCandidate, TProblem]:
-        res = [] if not (sol := p_conv.solve()) else sol.get_all_values()
+        res = [] if not (sol := p_conv.solve()) else [sol.get_value(v) for v in p_conv.iter_variables()]# [v for _, v in sol.iter_var_values()]  # sol.get_all_values()
         return s.eval(p, Utils.bits2idx(len(p.S))(np.clip(np.rint(res), 0, 1))), None
 
 

@@ -78,7 +78,7 @@ class OceanOptimizer(Generic[TCandidate, TProblem], Optimizer[TCandidate, TProbl
         import dwave.inspector  # do not remove this import, required for dwave.inspector.get_embedding, even though it is not used
         #result = self.sampler.sample(p_conv, num_reads=100)
         result = self.sample(p_conv)
-        embedding = result.info['embedding_context']['embedding']
+        #embedding = result.info['embedding_context']['embedding']  ## might be required even if not used
 
         #Ocean.HybridBQM: result.info['run_time']  # microseconds?
         #Ocean.BQM: result.info['timing']['qpu_access_time'] + result.info['timing']['post_processing_overhead_time']  # microseconds

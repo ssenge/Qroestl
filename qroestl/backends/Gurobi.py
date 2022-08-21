@@ -35,7 +35,7 @@ class Optimizer(Generic[TCandidate, TProblem], Model.Optimizer[TCandidate, TProb
     converter: Converter = Converter()
 
     def optimize_(self, p: TProblem, p_conv, a: Approach, s=Solution[TCandidate, TProblem]()) -> Solution[TCandidate, TProblem]:
-        #p_conv.setParam('OutputFlag', 0)
+        p_conv.setParam('OutputFlag', 0)
         p_conv.optimize()
         res = [] if p_conv.status is not GRB.OPTIMAL else [v.x for v in p_conv.getVars()]
         return s.eval(p, Utils.bits2idx(len(p.S))(np.clip(np.rint(res), 0, 1))), timedelta(seconds=p_conv.Runtime)
