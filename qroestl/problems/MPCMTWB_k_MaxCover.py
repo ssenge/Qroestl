@@ -1,33 +1,23 @@
-import copy
 import itertools
 import math
 import random
-import sys
-from collections import defaultdict
 from dataclasses import dataclass
-import time
-from datetime import datetime
 from operator import mul
-from random import randint, choice
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict
 
 import dimod
 import docplex
-import networkx as nx
+import gurobipy as gp
 import numpy as np
 from dimod import ConstrainedQuadraticModel, Binary
-from matplotlib import pyplot as plt
-from qiskit_optimization import QuadraticProgram
-import gurobipy as gp
 from gurobipy import GRB
-from qiskit_optimization.converters import QuadraticProgramToQubo
+from qiskit_optimization import QuadraticProgram
 
 from qroestl.backends.Cplex import CplexModelConvertible
 from qroestl.backends.Gurobi import GurobiModelConvertible
 from qroestl.backends.Ocean import OceanCQMToBQMConvertible, OceanCQMConvertible
-from qroestl.model import Model
-from qroestl.model.Model import Solution, Approach, Optimizer
 from qroestl.backends.Qiskit import QiskitQPConvertible, QiskitQuboConvertible, QiskitOperatorConvertible
+from qroestl.model import Model
 from qroestl.problems import MCMTWB_k_MaxCover
 from qroestl.utils import Utils
 from qroestl.utils.Utils import unique, flatten2d
@@ -37,14 +27,39 @@ TCandidate = List[List[int]]  # this is more the "logical" type, in reality it i
 
 @dataclass
 class Problem(Model.Problem[TCandidate]):
+    """
+    Sample how to instantiate a problem (see a description of the variables in the source code below):
+    MPCMTWB_k_MaxCover.Problem(nU=2, nS=3, k=2, R=[2, 0], T=[0, 1, 0], W=[1, 1], UQ=[50, 50], SQ=[50, 50, 52],
+                                 C=[
+                                     # C1 -- required single coverages (in %)
+                                     [
+                                         {(0,): 60, (1,): 15, (2,): 20}, # u1
+                                         {(2,): 20} # u2
+                                     ],
+                                     # C2 -- required double coverages
+                                     [
+                                         {(1, 2): 10}, # u1
+                                         {} # u2
+                                     ]
+                                 ],
+                                 RC=[
+                                     # C1 -- provided single coverages (in %)
+                                     [15, # u1
+                                      0 # u2
+                                      ],
+                                     # C2 -- provided double converages (in %)
+                                     [10, # u1
+                                      0]  # u2
+                                 ])
+    """
     nU: int  # number of universe elements
     nS: int  # number of sets
     k: int  # max number of sets to be selected
     R: Optional[List[int]] = None  # required covers (per universe element)
     C: List[List[Dict[List[int], float]]] = None  # partially covered universe elements (per universe element)
-    RC: Optional[List[float]] = None
-    UQ: Optional[List[float]] = None
-    SQ: Optional[List[float]] = None
+    RC: Optional[List[float]] = None  # coverages (per set / per universe element)
+    UQ: Optional[List[float]] = None  # required quality coverage (per universe element)
+    SQ: Optional[List[float]] = None  # quality (per set)
     T: Optional[List[int]] = None  # type (per set)
     W: Optional[List[float]] = None  # weight (per universe element)
     P: Optional[List[float]] = None  # price (per set)
@@ -52,6 +67,8 @@ class Problem(Model.Problem[TCandidate]):
     name: str = 'Multi Partial Cover Multi Type Weighted Budgeted k-Max Set Cover'
 
     def __post_init__(self) -> None:
+
+        # In the following some default values are set (if requried):
         if not self.R:
             self.R = [0] * self.nU
         if not self.T:
@@ -66,31 +83,50 @@ class Problem(Model.Problem[TCandidate]):
         self.U = list(range(self.nU))
         self.S = list(range(self.nS))
 
-        self.u_ss = {u: [s[0] for s in ss.keys()] for u, ss in enumerate(self.C[0])}
-        self.s_us = {s: [u for u, ss in self.u_ss.items() if s in ss] for s in self.S}
+        # Additional parameters
+        self.alpha = 1  # coefficient for the single coverage term
+        self.beta = 1  # coefficient for the double coverage term
 
+        self.sC_sum = {s: 0 for s in self.S}
+        for u_dict in self.C[0]:
+            for sc in u_dict.items():
+                self.sC_sum[sc[0][0]] = self.sC_sum[sc[0][0]] + sc[1]
+
+        # Sets that cover at least one universe element
+        # self.us_C1 = [u for u, r in enumerate(self.R) if r <= 1]
+        # self.covers1 = [sc for u in us_C1 for sc in p.C[0][u].items()]
+        self.covers1 = self.S
+        # Sets that cover two universe element
+        us_C2 = [u for u, r in enumerate(self.R) if r >= 2]
+        self.covers2 = [sc for u in us_C2 for sc in self.C[1][u].items()]
+
+        # Configuration for Big M transformation
+        self.M1 = 110  # for single coverage
+        self.M2 = self.M1  # for double coverage
+
+        ### To speed up calculations below, let's prepare some look up dicts
+        ### Terminology: x_y => a map from 'x' to 'y' (an additional 's' indicates plural, i.e. is a mapping to multiple elements (list))
+
+        # Mapping from an universe elements (u) to sets (ss) where u is covered by one s in ss
+        self.u_ss = {u: [s[0] for s in ss.keys()] for u, ss in enumerate(self.C[0])}
+        # All universe elements covered by a set
+        self.s_us = {s: [u for u, ss in self.u_ss.items() if s in ss] for s in self.S}
+        # All set types covering an universe element
         self.u_ts = {u: list(set([self.T[s] for s in self.u_ss[u]])) for u in
                      self.U}  # u -> types (of sets that cover u)
-        self.W_offset = [w * (self.k + 1) for w in
-                         self.W]  # offsetting weights (by linear multiplicative spread) to allow for negative coefficients for set variables without affecting the optimal solution
+
+        # offsetting weights (by linear multiplicative spread) to allow for negative coefficients for set variables without affecting the optimal solution
+        self.W_offset = [w * (self.k + 1) for w in self.W]
 
         # Typically not required
         # self.P_normalized = [self.k * (self.P[s] / sum(self.P)) for s in self.S]
         # self.B_normalized = sum(self.P_normalized)
 
-        # Remove
-        # n = 0
-        # m = 0
-        # for u_ssc in self.C[1]:
-        #     n += len(u_ssc.keys())
-        #     m += 1
-        # avg = n / m
-        # print("Overlap avg: ", avg)
-
     def __str__(self):
         return f'nU={self.nU} nS={self.nS} k={self.k} B={self.B}\nW={np.array(self.W)}\nR={np.array(self.R)}\nT={np.array(self.T)}\nP={np.array(self.P)}\nC={np.array(self.C)}'
 
     def _validate(self):
+        """ Doing some sanity checks. """
         # assert self.nU == len(self.U)
         assert self.nU == len(self.W)
         assert self.nU == len(self.R)
@@ -100,18 +136,15 @@ class Problem(Model.Problem[TCandidate]):
         assert self.B >= 0
 
     def feasible(self, c: TCandidate) -> bool:
-        # For general comments on this approach, see the MCMTWB problem
-        # print("Candidate: ", c)
+        ''' Checks if a candidate solution is feasible, used e.g. in the brute force approach. '''
         # 1 - Check for max k
         if len(c) > self.k or sum(self.P[s] for s in c) > self.B:
-            #    print("too long #1")
             return False
 
         # 2 - Check for R cover
         U = [u for u in self.U if self.R[u] > 0]
         for u in U:
             if len([s for s in c if s in self.u_ss[u]]) < self.R[u]:
-                #       print("not sufficient R cover #2")
                 return False
 
         # 3 - Check for type cover
@@ -119,7 +152,6 @@ class Problem(Model.Problem[TCandidate]):
         # type_covered = np.all(list(map(lambda u: self.R[u] <= len(types(u)), U)))
         for u in U:  # ugly but faster due to premature exit
             if self.R[u] > len(types(u)):  # This also checks for general >R[u] coverage, not only types
-                #      print("not sufficent type cover #3")
                 return False
 
         # 4 - Check for multi type and min quality cover
@@ -145,76 +177,58 @@ class Problem(Model.Problem[TCandidate]):
         res = np.all([covered_Cn(Cn) for Cn in range(len(self.C))]) and minq()
         if res:
             return True
-        # else:
-        #    print("not sufficient Cn cover (probably, otherwise minq)")
         return False
 
     def value(self, c: TCandidate) -> float:
+        """ Returns the value of a solution candidate. """
         # Sum up all C1 values if the set is in the candidate
         # sum(c_dict[1] for c1 in self.C[0] for c_dict in c1.items() for s in c if c_dict[0][0] == s)
         return sum(c1[(s,)] for c1 in self.C[0] for s in c if (s,) in c1)
         # + sum((self.RQ[u] - self.SQ[s]) for s in c for u in self.s_us[s])
 
     def all_solutions(self) -> List[TCandidate]:
+        """ Return all possible solutions. """
         return Utils.powerset(self.S)
 
 
 @dataclass
 class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertible, QiskitOperatorConvertible,
                GurobiModelConvertible, CplexModelConvertible, OceanCQMConvertible, OceanCQMToBQMConvertible):
-    name: str = "MPCMTWB-k-MaxCover Heuristic1"
+    """ Standard solution approach. """
+
+    name: str = "MPCMTWB-k-MaxCover Standard"
 
     def to_qiskit_qp(self, p: Problem) -> QuadraticProgram:
-        uts = [f'u{u}t{t}' for u in p.U if p.R[u] > 0 for t in p.u_ts[u]]
+        """ Returns a Qiskit QuadraticProgram representation of the optimization problem.  """
 
-        alpha = 1  # TODO: parameter
-        beta = 1  # TODO: parameter
-        t = 0.1  # min coverage threshold, TODO: parameter
-        us_C1 = [u for u, r in enumerate(p.R) if r <= 1]
-        us_C2 = [u for u, r in enumerate(p.R) if r >= 2]
-
-        sC_sum = {s: 0 for s in p.S}
-        # for s in p.S:
-        for u_dict in p.C[0]:
-            for sc in u_dict.items():
-                sC_sum[sc[0][0]] = sC_sum[sc[0][0]] + sc[1]
-
-        # covers1 = [sc for u in us_C1 for sc in p.C[0][u].items()]
-        covers1 = p.S  # []
-        covers2 = [sc for u in us_C2 for sc in p.C[1][u].items()]
+        ##### The general outline for the LP is described here, in the below ports to other SDKs, the same structure will be used
 
         m = QuadraticProgram(self.name)
         m.binary_var_list(p.S, name='s')
         m.binary_var_list(p.U, name='u')
+        uts = [f'u{u}t{t}' for u in p.U if p.R[u] > 0 for t in p.u_ts[u]]
         m.binary_var_list(uts, name='')
 
-        m.maximize(linear={f's{s}': alpha * sC_sum[s] for s in covers1},
+        m.maximize(linear={f's{s}': p.alpha * p.sC_sum[s] for s in p.covers1},
                    # *-1 {f's{s[0]}': alpha * c for s, c in covers1},  # *-1
-                   quadratic={**{(f's{s1_s2[0]}', f's{s1_s2[1]}'): beta * c_s1_s2 for s1_s2, c_s1_s2 in covers2},
+                   quadratic={**{(f's{s1_s2[0]}', f's{s1_s2[1]}'): p.beta * c_s1_s2 for s1_s2, c_s1_s2 in p.covers2},
                               # **{(f's{s1_s2[0]}', f's{s1_s2[1]}'): 1 for s1_s2, c_s1_s2 in covers2}
-                              },
-                   constant=0
-                   )
+                              },  ## theoretically, the quadratic part can be skipped as constraints enfore the double coverage
+                   constant=0)
 
-        m.linear_constraint(linear={f's{s}': 1 for s in p.S}, sense='<=', rhs=p.k,
-                            name='max_k_sets')  # equality constraint instead of less than as the used in a loop over k
+        m.linear_constraint(linear={f's{s}': 1 for s in p.S}, sense='<=', rhs=p.k, name='max_k_sets')
         m.linear_constraint(linear={f's{s}': p.P[s] for s in p.S}, sense='<=', rhs=p.B, name='max_budget')
 
-        # Not required -- as u's are no longer present in the obj func and the coverage is a pre-calculated parameter
-        # for u in p.U:
-        #    m.linear_constraint(linear={**{f's{s}': 1 for s in p.S if u in p.s_us[s]}, **{f'u{u}': -1}}, sense='>=', rhs=0, name=f'cover_for_u{u}')
         for u in p.U:
             if (min_ss := p.R[u]) > 0:
-                c = min_ss
                 m.linear_constraint(linear={s: 1 for s in p.u_ss[u]}, sense='>=', rhs=min_ss,
                                     name=f'min_{min_ss}_sets_for_u{u}')
-                m.linear_constraint(linear={f'u{u}t{t}': 1 for t in p.u_ts[u]}, sense='>=', rhs=c,
-                                    name=f'min_{c}_types_for_u{u}')
+                m.linear_constraint(linear={f'u{u}t{t}': 1 for t in p.u_ts[u]}, sense='>=', rhs=min_ss,
+                                    name=f'min_{min_ss}_types_for_u{u}')
                 for t in p.u_ts[u]:
                     m.linear_constraint(
                         linear={**{f's{s}': -1 for s in p.u_ss[u] if p.T[s] == t}, **{f'u{u}t{t}': 1}}, sense='<=',
                         rhs=0, name=f'type_cover_u{u}t{t}')
-        M1 = 110
 
         for u in p.U:
             pc1_vars = []
@@ -222,26 +236,22 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
                 for s in [s for s in p.u_ss[u] if p.C[0][u][(s,)] >= min_pc1]:
                     pc1_vars.append(f'pc1_u{u}_s{s}')
                     m.binary_var(name=f'pc1_u{u}_s{s}')
-                    m.linear_constraint(linear={**{f's{s}': -p.C[0][u][(s,)]}, **{f'pc1_u{u}_s{s}': M1}}, sense='<=',
-                                        rhs=-min_pc1 + M1, name=f'min_C1_for_u{u}_by_s{s}')
-                    # m.linear_constraint(linear={**{f's{s}': -pc1}, **{f'u{u}': uq1}, **{f'uq1_u{u}_s{s}': 1000}} , sense='<=', rhs=-uq1, name=f'min quality for u{u} s{s}')
+                    m.linear_constraint(linear={**{f's{s}': -p.C[0][u][(s,)]}, **{f'pc1_u{u}_s{s}': p.M1}}, sense='<=',
+                                        rhs=-min_pc1 + p.M1, name=f'min_C1_for_u{u}_by_s{s}')
                 m.linear_constraint(linear={var: 1 for var in pc1_vars}, sense='>=', rhs=1,
-                                    name=f'at_least_one_C1_set_with_sufficient_partial_coverage_for_u{u}_with_{min_pc1}%')  # len(pc1_vars)-1
+                                    name=f'at_least_one_C1_set_with_sufficient_partial_coverage_for_u{u}_with_{min_pc1}%')
 
-        M2 = M1
-
-        # s1s2_vars = []
         for u in p.U:
             pc2_vars = []
             if (min_pc2 := p.RC[1][u]) > 0:
                 for s1s2 in [s1s2 for s1s2 in p.C[1][u] if p.C[1][u][s1s2] >= min_pc2]:
                     pc2_vars.append(f'pc2_u{u}_s{s1s2[0]}_s{s1s2[1]}')
                     m.binary_var(name=f'pc2_u{u}_s{s1s2[0]}_s{s1s2[1]}')
-                    # s1s2_vars.append(f's{s1s2[0]}_s{s1s2[1]}')
                     m.binary_var(name=f's{s1s2[0]}_s{s1s2[1]}')
                     m.linear_constraint(
                         linear={**{f's{s1s2[0]}': -p.C[1][u][s1s2]}, **{f's{s1s2[1]}': -p.C[1][u][s1s2]},
-                                **{f'pc2_u{u}_s{s1s2[0]}_s{s1s2[1]}': M2}}, sense='<=', rhs=-p.C[1][u][s1s2] + M2 - 1,
+                                **{f'pc2_u{u}_s{s1s2[0]}_s{s1s2[1]}': p.M2}}, sense='<=',
+                        rhs=-p.C[1][u][s1s2] + p.M2 - 1,
                         name=f'min_C2_for_u{u}_by_s{s1s2[0]}_s{s1s2[1]}')
                 m.linear_constraint(linear={var: 1 for var in pc2_vars}, sense='>=', rhs=1,
                                     name=f'at_least_one_C2_set_with_sufficient_partial_coverage_for_u{u}_with_{min_pc2}%')  # len(pc1_vars)-1
@@ -265,47 +275,30 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
 
         return m
 
+    ### The following methods just re-cast the problem formulation to different libraries
+
     def to_gurobi_model(self, p: Problem):
-        uts = [f'u{u}t{t}' for u in p.U if p.R[u] > 0 for t in p.u_ts[u]]
-
-        alpha = 1  # TODO: parameter
-        beta = 0  # TODO: parameter
-        t = 0.1  # min coverage threshold, TODO: parameter
-        us_C1 = [u for u, r in enumerate(p.R) if r <= 1]
-        us_C2 = [u for u, r in enumerate(p.R) if r >= 2]
-
-        sC_sum = {s: 0 for s in p.S}
-        # for s in p.S:
-        for u_dict in p.C[0]:
-            for sc in u_dict.items():
-                sC_sum[sc[0][0]] = sC_sum[sc[0][0]] + sc[1]
-
-        # covers1 = [sc for u in us_C1 for sc in p.C[0][u].items()]
-        covers1 = p.S  # []
-        covers2 = [sc for u in us_C2 for sc in p.C[1][u].items()]
-
         m = gp.Model(self.name)
         # m = gp.read('qubo.mps')
         m.ModelSense = GRB.MAXIMIZE
 
-        s_sb = m.addVars(p.S, obj=sC_sum, name='s', vtype=GRB.BINARY)
+        s_sb = m.addVars(p.S, obj=p.sC_sum, name='s', vtype=GRB.BINARY)
         u_ub = m.addVars(p.U, obj=p.W_offset, name='u', vtype=GRB.BINARY)
+        uts = [f'u{u}t{t}' for u in p.U if p.R[u] > 0 for t in p.u_ts[u]]
         ut_utbs = m.addVars(uts, name='', vtype=GRB.BINARY)
-        m.setObjective(gp.quicksum([alpha * sC_sum[s] * s_sb[s] for s in
-                                    covers1]))  # + gp.quicksum([beta * s_sb[s1_s2[0]] * s_sb[s1_s2[1]] * c_s1_s2 for s1_s2, c_s1_s2 in covers2]))
+        m.setObjective(gp.quicksum([p.alpha * p.sC_sum[s] * s_sb[s] for s in
+                                    p.covers1]))  # + gp.quicksum([p.beta * s_sb[s1_s2[0]] * s_sb[s1_s2[1]] * c_s1_s2 for s1_s2, c_s1_s2 in p.covers2]))
         m.addConstr(s_sb.sum() <= p.k, "max k sets")
         m.addConstr(gp.quicksum([s_sb[s] * p.P[s] for s in p.S]) <= p.B, 'max budget')
 
         for u in p.U:
             if (min_ss := p.R[u]) > 0:
-                c = min_ss
                 m.addConstr(gp.quicksum([s_sb[s] for s in p.u_ss[u]]) >= min_ss, f'min_{min_ss}_sets_for_u{u}')
-                m.addConstr(gp.quicksum(ut_utbs[f'u{u}t{t}'] for t in p.u_ts[u]) >= c, f'min_{c}_types_for_u{u}')
+                m.addConstr(gp.quicksum(ut_utbs[f'u{u}t{t}'] for t in p.u_ts[u]) >= min_ss,
+                            f'min_{min_ss}_types_for_u{u}')
                 for t in p.u_ts[u]:
                     m.addConstr((gp.quicksum([-s_sb[s] for s in p.u_ss[u] if p.T[s] == t])) + ut_utbs[f'u{u}t{t}'] <= 0,
                                 f'type_cover_u{u}t{t}')
-
-        M1 = 110
 
         for u in p.U:
             pc1_vars = []
@@ -313,16 +306,13 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
             if (min_pc1 := p.RC[0][u]) > 0:
                 for s in [s for s in p.u_ss[u] if p.C[0][u][(s,)] >= min_pc1]:
                     pc1_vars.append(f'pc1_u{u}_s{s}')
-                    # m.binary_var(name=f'pc1_u{u}_s{s}')
                     pc1_var = m.addVar(name=f'pc1_u{u}_s{s}', vtype=GRB.BINARY)
                     pc1_vars_b.append(pc1_var)
-                    m.addConstr((-p.C[0][u][(s,)] * s_sb[s] + M1 * pc1_var) <= -min_pc1 + M1,
+                    m.addConstr((-p.C[0][u][(s,)] * s_sb[s] + p.M1 * pc1_var) <= -min_pc1 + p.M1,
                                 f'min_C1_for_u{u}_by_s{s}')
                 m.addConstr(gp.quicksum(pc1_vars_b) >= 1,
                             f'at_least_one_C1_set_with_sufficient_partial_coverage_for_u{u}_with_{min_pc1}%')
-        M2 = M1
 
-        # s1s2_vars = []
         for u in p.U:
             pc2_vars = []
             pc2_vars_b = []
@@ -332,8 +322,8 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
                     pc2_var = m.addVar(name=f'pc2_u{u}_s{s1s2[0]}_s{s1s2[1]}', vtype=GRB.BINARY)
                     pc2_vars_b.append(pc2_var)
                     m.addConstr(
-                        (-p.C[1][u][s1s2] * s_sb[s1s2[0]] + (-p.C[1][u][s1s2] * s_sb[s1s2[1]]) + M2 * pc2_var) <= -
-                        p.C[1][u][s1s2] + M2 - 1, f'min_C2_for_u{u}_by_s{s1s2[0]}_s{s1s2[1]}')
+                        (-p.C[1][u][s1s2] * s_sb[s1s2[0]] + (-p.C[1][u][s1s2] * s_sb[s1s2[1]]) + p.M2 * pc2_var) <= -
+                        p.C[1][u][s1s2] + p.M2 - 1, f'min_C2_for_u{u}_by_s{s1s2[0]}_s{s1s2[1]}')
                 m.addConstr(gp.quicksum(pc2_vars_b) >= 1,
                             f'at_least_one_C2_set_with_sufficient_partial_coverage_for_u{u}_with_{min_pc2}%')
 
@@ -346,42 +336,23 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
         return m
 
     def to_cplex_model(self, p: Problem):
-        uts = [f'u{u}t{t}' for u in p.U if p.R[u] > 0 for t in p.u_ts[u]]
-
-        alpha = 1  # TODO: parameter
-        beta = 0  # TODO: parameter
-        t = 0.1  # min coverage threshold, TODO: parameter
-        us_C1 = [u for u, r in enumerate(p.R) if r <= 1]
-        us_C2 = [u for u, r in enumerate(p.R) if r >= 2]
-
-        sC_sum = {s: 0 for s in p.S}
-        for u_dict in p.C[0]:
-            for sc in u_dict.items():
-                sC_sum[sc[0][0]] = sC_sum[sc[0][0]] + sc[1]
-
-        # covers1 = [sc for u in us_C1 for sc in p.C[0][u].items()]
-        covers1 = p.S  # []
-        covers2 = [sc for u in us_C2 for sc in p.C[1][u].items()]
-
         m = docplex.mp.model.Model(name=self.name)
         s_sb = m.binary_var_dict(p.S, name='s')
         u_ub = m.binary_var_dict(p.U, name='u')
+        uts = [f'u{u}t{t}' for u in p.U if p.R[u] > 0 for t in p.u_ts[u]]
         ut_utbs = m.binary_var_dict(uts, name='')
 
-        m.maximize(m.sum([alpha * sC_sum[s] * s_sb[s] for s in covers1]))
+        m.maximize(m.sum([p.alpha * p.sC_sum[s] * s_sb[s] for s in p.covers1]))
         m.add(m.sum(s_sb) <= p.k, 'k sets')
         m.add(m.sum(m.scal_prod(list(s_sb.values()), p.P)) <= p.B, 'max budget')
 
         for u in p.U:
             if (min_ss := p.R[u]) > 0:
-                c = min_ss
                 m.add(m.sum([s_sb[s] for s in p.u_ss[u]]) >= min_ss, f'min_{min_ss}_sets_for_u{u}')
-                m.add(m.sum(ut_utbs[f'u{u}t{t}'] for t in p.u_ts[u]) >= c, f'min_{c}_types_for_u{u}')
+                m.add(m.sum(ut_utbs[f'u{u}t{t}'] for t in p.u_ts[u]) >= min_ss, f'min_{min_ss}_types_for_u{u}')
                 for t in p.u_ts[u]:
                     m.add((m.sum([-s_sb[s] for s in p.u_ss[u] if p.T[s] == t])) + ut_utbs[f'u{u}t{t}'] <= 0,
                           f'type_cover_u{u}t{t}')
-
-        M1 = 110
 
         for u in p.U:
             pc1_vars = []
@@ -391,13 +362,10 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
                     pc1_vars.append(f'pc1_u{u}_s{s}')
                     pc1_var = m.binary_var(f'pc1_u{u}_s{s}')
                     pc1_vars_b.append(pc1_var)
-                    m.add((-p.C[0][u][(s,)] * s_sb[s] + M1 * pc1_var) <= -min_pc1 + M1, f'min_C1_for_u{u}_by_s{s}')
+                    m.add((-p.C[0][u][(s,)] * s_sb[s] + p.M1 * pc1_var) <= -min_pc1 + p.M1, f'min_C1_for_u{u}_by_s{s}')
                 m.add(m.sum(pc1_vars_b) >= 1,
                       f'at_least_one_C1_set_with_sufficient_partial_coverage_for_u{u}_with_{min_pc1}%')
 
-        M2 = M1
-
-        # s1s2_vars = []
         for u in p.U:
             pc2_vars = []
             pc2_vars_b = []
@@ -405,11 +373,11 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
                 for s1s2 in [s1s2 for s1s2 in p.C[1][u] if p.C[1][u][s1s2] >= min_pc2]:
                     pc2_vars.append(f'pc2_u{u}_s{s1s2[0]}_s{s1s2[1]}')
                     pc2_var = m.binary_var(
-                        name=f'pc2_u{u}_s{s1s2[0]}_s{s1s2[1]}')  # m.addVar(name=f'pc2_u{u}_s{s1s2[0]}_s{s1s2[1]}', vtype=GRB.BINARY)
+                        name=f'pc2_u{u}_s{s1s2[0]}_s{s1s2[1]}')
                     pc2_vars_b.append(pc2_var)
                     m.add(
-                        (-p.C[1][u][s1s2] * s_sb[s1s2[0]] + (-p.C[1][u][s1s2] * s_sb[s1s2[1]]) + M2 * pc2_var) <= -
-                        p.C[1][u][s1s2] + M2 - 1, f'min_C2_for_u{u}_by_s{s1s2[0]}_s{s1s2[1]}')
+                        (-p.C[1][u][s1s2] * s_sb[s1s2[0]] + (-p.C[1][u][s1s2] * s_sb[s1s2[1]]) + p.M2 * pc2_var) <= -
+                        p.C[1][u][s1s2] + p.M2 - 1, f'min_C2_for_u{u}_by_s{s1s2[0]}_s{s1s2[1]}')
                 m.add(m.sum(pc2_vars_b) >= 1,
                       f'at_least_one_C2_set_with_sufficient_partial_coverage_for_u{u}_with_{min_pc2}%')
 
@@ -422,46 +390,24 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
         return m
 
     def to_ocean_cqm(self, p: Problem):
-        uts = [f'u{u}t{t}' for u in p.U if p.R[u] > 0 for t in p.u_ts[u]]
-
-        alpha = 1  # TODO: parameter
-        beta = 0  # TODO: parameter
-        t = 0.1  # min coverage threshold, TODO: parameter
-        us_C1 = [u for u, r in enumerate(p.R) if r <= 1]
-        us_C2 = [u for u, r in enumerate(p.R) if r >= 2]
-
-        sC_sum = {s: 0 for s in p.S}
-        for u_dict in p.C[0]:
-            for sc in u_dict.items():
-                sC_sum[sc[0][0]] = sC_sum[sc[0][0]] + sc[1]
-
-        # covers1 = [sc for u in us_C1 for sc in p.C[0][u].items()]
-        covers1 = p.S  # []
-        covers2 = [sc for u in us_C2 for sc in p.C[1][u].items()]
-
+        m = ConstrainedQuadraticModel()
         s_sb = {s: Binary(f's{s}') for s in p.S}
         sbs = s_sb.values()
         u_ub = {u: Binary(f'u{u}') for u in p.U}
-        ubs = u_ub.values()
-        u_utbs = {u: [Binary(f'u{u}t{t}') for t in p.u_ts[u]] for u in p.U}
         u_t_utb = {u: {t: Binary(f'u{u}t{t}') for t in p.u_ts[u]} for u in p.U}
 
-        m = ConstrainedQuadraticModel()
-        m.set_objective(-1 * (sum([alpha * sC_sum[s] * s_sb[s] for s in covers1])))
+        m.set_objective(-1 * (sum([p.alpha * p.sC_sum[s] * s_sb[s] for s in p.covers1])))
 
         m.add_constraint(sum(sbs) <= p.k, "max k sets")
         m.add_constraint(sum(map(mul, sbs, p.P)) <= p.B, 'max budget')
 
         for u in p.U:
             if (min_ss := p.R[u]) > 0:
-                c = min_ss
                 m.add_constraint(sum([s_sb[s] for s in p.u_ss[u]]) >= min_ss, f'min_{min_ss}_sets_for_u{u}')
-                m.add_constraint(sum(u_t_utb[u][t] for t in p.u_ts[u]) >= c, f'min_{c}_types_for_u{u}')
+                m.add_constraint(sum(u_t_utb[u][t] for t in p.u_ts[u]) >= min_ss, f'min_{min_ss}_types_for_u{u}')
                 for t in p.u_ts[u]:
                     m.add_constraint((sum([-s_sb[s] for s in p.u_ss[u] if p.T[s] == t])) + u_t_utb[u][t] <= 0,
                                      f'type_cover_u{u}t{t}')
-
-        M1 = 110
 
         for u in p.U:
             pc1_vars = []
@@ -471,14 +417,11 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
                     pc1_vars.append(f'pc1_u{u}_s{s}')
                     pc1_var = Binary(f'pc1_u{u}_s{s}')
                     pc1_vars_b.append(pc1_var)
-                    m.add_constraint((-p.C[0][u][(s,)] * s_sb[s] + M1 * pc1_var) <= -min_pc1 + M1,
+                    m.add_constraint((-p.C[0][u][(s,)] * s_sb[s] + p.M1 * pc1_var) <= -min_pc1 + p.M1,
                                      f'min_C1_for_u{u}_by_s{s}')
                 m.add_constraint(sum(pc1_vars_b) >= 1,
                                  f'at_least_one_C1_set_with_sufficient_partial_coverage_for_u{u}_with_{min_pc1}%')
 
-        M2 = M1
-
-        # s1s2_vars = []
         for u in p.U:
             pc2_vars = []
             pc2_vars_b = []
@@ -488,15 +431,16 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
                     pc2_var = Binary(f'pc2_u{u}_s{s1s2[0]}_s{s1s2[1]}')
                     pc2_vars_b.append(pc2_var)
                     m.add_constraint(
-                        (-p.C[1][u][s1s2] * s_sb[s1s2[0]] + (-p.C[1][u][s1s2] * s_sb[s1s2[1]]) + M2 * pc2_var) <= -
-                        p.C[1][u][s1s2] + M2 - 1, f'min_C2_for_u{u}_by_s{s1s2[0]}_s{s1s2[1]}')
+                        (-p.C[1][u][s1s2] * s_sb[s1s2[0]] + (-p.C[1][u][s1s2] * s_sb[s1s2[1]]) + p.M2 * pc2_var) <= -
+                        p.C[1][u][s1s2] + p.M2 - 1, f'min_C2_for_u{u}_by_s{s1s2[0]}_s{s1s2[1]}')
                 m.add_constraint(sum(pc2_vars_b) >= 1,
                                  f'at_least_one_C2_set_with_sufficient_partial_coverage_for_u{u}_with_{min_pc2}%')
 
         for u in p.U:
             if len(p.u_ss[u]) > 0:
                 m.add_constraint(
-                    (sum([s_sb[s] * p.SQ[s] for s in p.u_ss[u]]) + sum([-p.UQ[u] * u_ub[u]])) >= 0, f'min_quality_for_u{u}')
+                    (sum([s_sb[s] * p.SQ[s] for s in p.u_ss[u]]) + sum([-p.UQ[u] * u_ub[u]])) >= 0,
+                    f'min_quality_for_u{u}')
         return m
 
     def to_ocean_bqm_from_cqm(self, p: Problem):
@@ -505,6 +449,8 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
     def extract(self, result_dict):
         return sorted({k: v for k, v in result_dict.items() if k.startswith('s')}.values())
 
+
+### Different generators for synthentic data
 
 def gen(nU, nS_per_U, k):
     nS = nU * nS_per_U
