@@ -28,19 +28,26 @@ TCandidate = List[int]  # this is more the "logical" type, in reality it is np.a
 @dataclass
 class Problem(Model.Problem[TCandidate]):
     """
-    Build quadratic mixed integer program
+    Build general quadratic program
     """
-    num_vars: int # number of variables
-    matrix: List[List[int]] # quadratic factor matrix
+    quadratic: List[List[int]] # quadratic coefficient matrix
     linear: Optional(List[int]) # linear coefficients
     constant: Optional(int) # constant offset
+
+    rhs: Optional(List[float]) # right handside constraints
+    lhs: Optional(List[List[float]]) # left handside constraints
+
     upper_bounds: Optional(List[int]) # upper bounds of variables
     lower_bounds: Optional(List[int]) # lower bounds of variables
+
     integer: Optional(List[int]) # integer variables [0,1,0,1,1,1] (Bool Value)
     binary: Optional(List[int]) # binary variables [0,0,0,1,1,1] (Bool Value)
-    name: str = 'Quadratic Mixed Integer Program'
+
+    maximize: Optional(bool)
+    name: str = 'Quadratic Program'
 
     def __post_init__(self) -> None:
+        #TODO: Finish this part AND Implement num_vars: int # number of variables
         if not self.upper_bounds:
             self.upper_bounds = [1] * self.n # upper bound 1
         if not self.lower_bounds:
@@ -51,6 +58,8 @@ class Problem(Model.Problem[TCandidate]):
             self.integer = [1] * self.n # every variable integer
         if not self.constant:
             self.constant = 0 # every variable integer
+        if not self.constant:
+            self.maximize = False # every variable integer
         self._validate()
         self.index_list = list(range(self.num_vars))
 
@@ -74,8 +83,52 @@ class Problem(Model.Problem[TCandidate]):
         pass
 
 
+
 @dataclass
-class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertible, QiskitOperatorConvertible,
+class Standard(Model.Approach[Problem], QiskitQPConvertible, GurobiModelConvertible, CplexModelConvertible):
+    """ Standard solution approach. """
+
+    name: str = "Quadratic Standard"
+
+    def get_index_lists(self, p: Problem) -> tuple(List[int], List[int], List[int]):
+        binary_index_list = [i for i, elem in enumerate(p.binary) if elem == 1]
+        integer_index_list = [i for i, elem in enumerate(p.integer^p.binary) if elem == 1]
+        continous_index_list = np.array(np.logical_not(np.logical_and(binary_index_list, integer_index_list)), dtype=int)
+        return binary_index_list, integer_index_list, continous_index_list
+
+    def to_qiskit_qp(self, p: Problem) -> QuadraticProgram:
+        """ Returns a Qiskit QuadraticProgram representation of the optimization problem.  """
+
+        ##### The general outline for the LP is described here, in the below ports to other SDKs, the same structure will be used
+        m = QuadraticProgram(self.name)
+
+        # get binary, integer, continuous variables
+        binary_index_list, integer_index_list, continous_index_list = self.get_index_lists(p)
+        m.binary_var_list(binary_index_list, lowerbound=p.lower_bounds[binary_index_list], upperbound=p.upper_bounds[binary_index_list], name='b')
+        m.integer_var_list(integer_index_list, lowerbound=p.lower_bounds[integer_index_list], upperbound=p.upper_bounds[integer_index_list], name='i')
+        m.continuous_var_list(continous_index_list, lowerbound=p.lower_bounds[continous_index_list], upperbound=p.upper_bounds[continous_index_list], name='c')
+
+        # insert constraints
+        for i, con in enumerate(p.lhs):
+            m.linear_constraint(linear=con, sense="LQ", rhs=p.rhs[i])
+
+        # define objective function    # here not clear how qiskit deals with variables previously defined to be binary/integer?
+        if p.maximize:
+            m.maximize(linear=p.linear,
+                   quadratic=p.quadratic,
+                   constant=p.constant)
+        else: 
+            m.minimize(linear=p.linear,
+                   quadratic=p.quadratic,
+                   constant=p.constant)
+        return m
+
+    def extract(self, result_dict):
+        return sorted({k: v for k, v in result_dict.items() if k.startswith('s')}.values())
+
+
+@dataclass
+class Standard2(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertible, QiskitOperatorConvertible,
                GurobiModelConvertible, CplexModelConvertible, OceanCQMConvertible, OceanCQMToBQMConvertible):
     """ Standard solution approach. """
 
@@ -115,3 +168,12 @@ class Standard(Model.Approach[Problem], QiskitQPConvertible, QiskitQuboConvertib
 
     def extract(self, result_dict):
         return sorted({k: v for k, v in result_dict.items() if k.startswith('s')}.values())
+
+# TODO: Implementieren:
+# gleiches Problem
+
+# normalen Approach QiskitQPConvertible
+
+# QIskit Qubo Approach QiskitQPConvertible, QiskitQuboConvertible
+
+# Custom Qubo Approach QiskitQPConvertible, QiskitQuboConvertible
